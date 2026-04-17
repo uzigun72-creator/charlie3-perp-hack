@@ -1,0 +1,48 @@
+{
+  "name": "charli3perp-cardano-midnight",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "contract",
+    "charli3perp-local-cli"
+  ],
+  "scripts": {
+    "postinstall": "bash scripts/fix-libsodium-esm.sh && npx patch-package --patch-dir charli3perp-local-cli/patches && bash charli3perp-local-cli/scripts/prune-contract-midnight-nested.sh",
+    "build:contract": "npm run build -w @charli3perp/midnight-contract",
+    "build:cli": "tsc -p charli3perp-local-cli/tsconfig.json",
+    "compact": "npm run compact -w @charli3perp/midnight-contract",
+    "test": "vitest run",
+    "midnight:deploy": "npm run deploy -w @charli3perp/cli",
+    "bench:cardano-emulator": "tsx scripts/bench-cardano-emulator.ts",
+    "build:settlement-anchor": "sh -c 'cd cardano/settlement-anchor && aiken build'",
+    "cardano:anchor": "tsx scripts/cardano-anchor-settlement.ts",
+    "charli3:pull": "tsx scripts/cardano-charli3-pull.ts",
+    "demo:preprod-live": "tsx scripts/demo-preprod-live.ts",
+    "charli3:pairs": "tsx scripts/charli3-pairs-cli.ts",
+    "trade:adausd": "tsx scripts/trade-adausd-network.ts",
+    "trade:pipeline:print": "tsx scripts/trade-pipeline-orchestrator.ts print-env",
+    "trade:pipeline:run": "tsx scripts/trade-pipeline-orchestrator.ts run",
+    "order:terminal": "tsx scripts/c3perp-order-terminal.ts",
+    "perp:orders": "tsx scripts/c3perp-order-terminal.ts",
+    "perp": "tsx scripts/perp-cli.ts",
+    "proof-server": "docker run --rm -p 6300:6300 midnightntwrk/proof-server:8.0.3 midnight-proof-server -v",
+    "bootstrap": "bash scripts/bootstrap-trade.sh",
+    "trade:fast": "bash scripts/trade-fast.sh",
+    "deploy:midnight:order": "npm run run-all -w @charli3perp/cli",
+    "deploy:midnight:full": "npm run run-pipeline -w @charli3perp/cli",
+    "midnight:run-all:fresh": "env MIDNIGHT_WALLET_STATE_DISABLE=1 npm run run-all -w @charli3perp/cli"
+  },
+  "dependencies": {
+    "@lucid-evolution/lucid": "0.4.29",
+    "@midnight-ntwrk/compact-runtime": "0.15.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "patch-package": "^8.0.0",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.5"
+  }
+}

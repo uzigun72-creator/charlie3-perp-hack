@@ -1,0 +1,33 @@
+node_modules
+.env
+.local-orderbook.json
+dist
+contract/dist
+charli3perp-local-cli/dist
+charli3perp-local-cli/midnight-level-db
+.midnight-wallet-state
+docs/*-diagrams.md
+
+# ffmpeg demo outputs (from a local-only ASS pipeline, if you maintain those scripts)
+docs/media/*.mp4
+!docs/media/charli3perp-pipeline-demo.mp4
+docs/media/*.ass
+docs/media/*.webm
+
+# Local-only stylized demo sources (not part of the published tree)
+scripts/build-demo-mp4.ts
+scripts/cli-demo-replay.ts
+scripts/demo-run-data.ts
+
+# VHS / local screen-capture exports (paths used by docs/vhs-demo.tape etc.)
+demo/
+*.vhs.gif
+
+# Local editor and agent config (not part of the protocol source)
+.cursor/
+.agents/
+
+# IDE / OS noise
+.DS_Store
+.idea/
+*.swp
