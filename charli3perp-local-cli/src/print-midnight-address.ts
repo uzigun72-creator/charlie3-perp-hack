@@ -1,27 +1,34 @@
 /**
- * Print Midnight unshielded (tNIGHT) address for the current network id — no RPC sync.
+ * Print Midnight unshielded + shielded addresses for `deriveKeysAt` — no chain sync (keys-only shielded).
  *
- * Usage:
- *   MIDNIGHT_DEPLOY_NETWORK=preprod BIP39_MNEMONIC="…" npx tsx src/print-midnight-address.ts
+ *   MIDNIGHT_DEPLOY_NETWORK=preview BIP39_MNEMONIC="…" npx tsx src/print-midnight-address.ts
+ *
+ * Funder in `fund-derived-wallets` uses `MIDNIGHT_FUNDER_INDEX` (default `0`). Same as `MIDNIGHT_DERIVE_KEY_INDEX` if set.
  *
  * Without BIP39_MNEMONIC: generates a new 24-word phrase and prints it (save immediately).
  */
+import "./load_repo_env.js";
 import { Buffer } from "buffer";
 import * as bip39 from "bip39";
-import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
-import { HDWallet, Roles } from "@midnight-ntwrk/wallet-sdk-hd";
-import { createKeystore } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import { Charli3perpMidnightConfig } from "./config.js";
+import { deriveMidnightReceiveAddressesFromSeed } from "./wallet.js";
 
-function resolveNetworkId(): "preview" | "preprod" | "undeployed" {
-  const v = (process.env.MIDNIGHT_DEPLOY_NETWORK || "preprod").toLowerCase().trim();
-  if (v === "undeployed" || v === "local") return "undeployed";
-  if (v === "preview") return "preview";
-  return "preprod";
+function parseDeriveIndex(): number {
+  const raw =
+    process.env.MIDNIGHT_FUNDER_INDEX?.trim() ||
+    process.env.MIDNIGHT_DERIVE_KEY_INDEX?.trim() ||
+    "0";
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) {
+    console.error("MIDNIGHT_FUNDER_INDEX / MIDNIGHT_DERIVE_KEY_INDEX must be a non-negative integer");
+    process.exit(1);
+  }
+  return n;
 }
 
 async function main(): Promise<void> {
-  const networkId = resolveNetworkId();
-  setNetworkId(networkId);
+  const config = new Charli3perpMidnightConfig();
+  const deriveKeysAt = parseDeriveIndex();
 
   let mnemonic = process.env.BIP39_MNEMONIC?.trim();
   let generated = false;
@@ -35,35 +42,30 @@ async function main(): Promise<void> {
   }
 
   const seed = Buffer.from(await bip39.mnemonicToSeed(mnemonic));
-  const hdWallet = HDWallet.fromSeed(Uint8Array.from(seed));
-  if (hdWallet.type !== "seedOk") throw new Error("HDWallet init failed");
-
-  const derivationResult = hdWallet.hdWallet
-    .selectAccount(0)
-    .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
-    .deriveKeysAt(0);
-
-  if (derivationResult.type !== "keysDerived") throw new Error("Key derivation failed");
-
-  hdWallet.hdWallet.clear();
-
-  const keystore = createKeystore(derivationResult.keys[Roles.NightExternal], networkId);
-  const rawAddr = keystore.getBech32Address();
-  const unshieldedAddress =
-    typeof rawAddr === "string" ? rawAddr : rawAddr.toString();
+  const derived = await deriveMidnightReceiveAddressesFromSeed(seed, config, deriveKeysAt);
 
   const faucet =
-    networkId === "preview"
+    config.networkId === "preview"
       ? "https://faucet.preview.midnight.network"
-      : networkId === "preprod"
+      : config.networkId === "preprod"
         ? "https://faucet.preprod.midnight.network"
         : "local / undeployed faucet (see Midnight docs)";
-  console.log(JSON.stringify({
-    midnightNetworkId: networkId,
-    unshieldedAddress,
-    ...(generated ? { generatedMnemonic24: mnemonic } : {}),
-    note: `Fund tNIGHT at this unshielded address via ${faucet} then register for DUST per Midnight docs (Lace / delegate).`,
-  }, null, 2));
+
+  console.log(
+    JSON.stringify(
+      {
+        midnightNetworkId: config.networkId,
+        deriveKeysAt,
+        role: deriveKeysAt === 0 ? "typical funder (MIDNIGHT_FUNDER_INDEX default)" : "derived identity",
+        unshieldedAddress: derived.unshieldedStr,
+        shieldedAddress: derived.shieldedStr,
+        ...(generated ? { generatedMnemonic24: mnemonic } : {}),
+        note: `Fund tNIGHT at unshielded via ${faucet} (funder slot is usually deriveKeysAt 0).`,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((e) => {

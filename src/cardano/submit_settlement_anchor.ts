@@ -1,4 +1,4 @@
-import { createAppLucid } from "./lucid_wallet.js";
+import { createAppLucid, type AppLucid } from "./lucid_wallet.js";
 import {
   anchorDatumCbor,
   settlementAnchorScriptAddress,
@@ -10,6 +10,8 @@ export interface SubmitSettlementAnchorParams {
   settlementId: string;
   orderCommitmentHex64: string;
   midnightTxUtf8?: string;
+  /** Reuse wallet context (avoids a second Lucid init when pull + anchor run in one pipeline). */
+  lucid?: AppLucid;
 }
 
 export interface SubmitSettlementAnchorResult {
@@ -39,7 +41,10 @@ async function waitForTxVisible(
   txHash: string,
   maxWaitMs: number,
 ): Promise<boolean> {
-  const step = 2500;
+  const step = Math.max(
+    400,
+    Number.parseInt(process.env.ANCHOR_BF_POLL_MS || "1500", 10) || 1500,
+  );
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
     if (await blockfrostTxExists(txHash)) return true;
@@ -66,7 +71,7 @@ export async function submitSettlementAnchorTx(
   let lastErr: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const lucid = await createAppLucid();
+    const lucid = params.lucid ?? (await createAppLucid());
     const network = lucid.config().network;
     if (!network) throw new Error("Lucid network is not configured");
 
@@ -96,7 +101,11 @@ export async function submitSettlementAnchorTx(
         if (cardanoBackend() !== "blockfrost") {
           throw submitErr;
         }
-        const visible = await waitForTxVisible(txHash, 45_000);
+        const maxWait = Math.max(
+          5000,
+          Number.parseInt(process.env.ANCHOR_BF_SUBMIT_WAIT_MS || "45000", 10) || 45_000,
+        );
+        const visible = await waitForTxVisible(txHash, maxWait);
         if (!visible) {
           throw submitErr;
         }

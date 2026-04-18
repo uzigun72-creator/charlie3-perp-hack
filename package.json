@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "contract",
-    "charli3perp-local-cli"
+    "charli3perp-local-cli",
+    "perps-web"
   ],
   "scripts": {
     "postinstall": "bash scripts/fix-libsodium-esm.sh && npx patch-package --patch-dir charli3perp-local-cli/patches && bash charli3perp-local-cli/scripts/prune-contract-midnight-nested.sh",
@@ -16,6 +17,7 @@
     "midnight:deploy": "npm run deploy -w @charli3perp/cli",
     "bench:cardano-emulator": "tsx scripts/bench-cardano-emulator.ts",
     "build:settlement-anchor": "sh -c 'cd cardano/settlement-anchor && aiken build'",
+    "build:margin-pool": "sh -c 'cd cardano/margin-pool && aiken build'",
     "cardano:anchor": "tsx scripts/cardano-anchor-settlement.ts",
     "charli3:pull": "tsx scripts/cardano-charli3-pull.ts",
     "demo:preprod-live": "tsx scripts/demo-preprod-live.ts",
@@ -31,7 +33,24 @@
     "trade:fast": "bash scripts/trade-fast.sh",
     "deploy:midnight:order": "npm run run-all -w @charli3perp/cli",
     "deploy:midnight:full": "npm run run-pipeline -w @charli3perp/cli",
-    "midnight:run-all:fresh": "env MIDNIGHT_WALLET_STATE_DISABLE=1 npm run run-all -w @charli3perp/cli"
+    "midnight:run-all:fresh": "env MIDNIGHT_WALLET_STATE_DISABLE=1 npm run run-all -w @charli3perp/cli",
+    "midnight:fund-derived": "npm run fund-derived-wallets -w @charli3perp/cli",
+    "midnight:balance": "npm run midnight-wallet-balance -w @charli3perp/cli",
+    "midnight:sync-derived": "npm run sync-derived-wallets -w @charli3perp/cli",
+    "midnight:parallel-cli": "npm run parallel-cli -w @charli3perp/cli",
+    "bench:midnight:parallel-pipeline": "env C3PERP_PIPELINE_BENCH_LOG=1 MIDNIGHT_PARALLEL_SCRIPT=run-pipeline MIDNIGHT_PARALLEL_BENCH_JSON=1 npm run parallel-cli -w @charli3perp/cli",
+    "bench:midnight:sync": "npm run sync-bench -w @charli3perp/cli",
+    "midnight:bench:fund-parallel": "bash scripts/midnight-fund-and-parallel-bench.sh",
+    "midnight:bench:pipeline": "npm run bench:pipeline -w @charli3perp/cli",
+    "perps:dev": "concurrently \"npm run server:dev -w @charli3perp/perps-web\" \"wait-on tcp:127.0.0.1:${PERPS_API_PORT:-8791} -t 120000 && npm run dev -w @charli3perp/perps-web\"",
+    "perps:dev:mm": "concurrently -n server,web,mm \"npm run server:dev -w @charli3perp/perps-web\" \"wait-on tcp:127.0.0.1:${PERPS_API_PORT:-8791} -t 120000 && npm run dev -w @charli3perp/perps-web\" \"wait-on tcp:127.0.0.1:${PERPS_API_PORT:-8791} -t 120000 && npm run mm-bot\"",
+    "perps:server": "npm run server -w @charli3perp/perps-web",
+    "perps:build": "npm run build -w @charli3perp/perps-web",
+    "mm-bot": "tsx perps-web/scripts/mm-bot.ts",
+    "seed:liquidity": "tsx perps-web/scripts/seed-liquidity.ts",
+    "fund:frontend-mnemonic": "tsx scripts/fund-new-frontend-mnemonic.ts",
+    "clear:perps-trades": "tsx scripts/clear-perps-trades.ts",
+    "margin-pool:demo": "tsx scripts/margin-pool-preprod.ts"
   },
   "dependencies": {
     "@lucid-evolution/lucid": "0.4.29",
@@ -39,10 +58,12 @@
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
-    "patch-package": "^8.0.0",
     "@types/node": "^22.15.0",
+    "concurrently": "^9.1.0",
+    "patch-package": "^8.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "wait-on": "^8.0.5"
   }
 }

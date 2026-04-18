@@ -9,19 +9,16 @@
  */
 import "./load_repo_env.js";
 import { Buffer } from 'buffer';
-import WebSocket from 'ws';
 import * as bip39 from 'bip39';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { charli3perpOrderPrivateStateId, Charli3perpOrder } from '@charli3perp/midnight-contract';
 import { charli3perpOrderCompiledContractLocal } from './charli3perp-compiled-contract.js';
 import { Charli3perpMidnightConfig } from './config.js';
 import { configureCharli3perpOrderProviders } from './providers.js';
-import { initWalletWithSeed, persistMidnightWalletState } from './wallet.js';
+import { deriveKeyIndexFromEnv, initWalletWithSeed, persistMidnightWalletState } from './wallet.js';
 import { traderLedgerPublicKey } from './trader-key.js';
 import { waitForWalletSyncedWithHeartbeat } from './wait_wallet_sync.js';
 import { ensureProofServerPortReachable, printProvingFailureHints } from './proof_server_preflight.js';
-
-(globalThis as any).WebSocket = WebSocket;
 
 function hexToBytes32(hex: string): Uint8Array {
   const h = hex.replace(/^0x/, '');
@@ -41,7 +38,7 @@ async function main(): Promise<void> {
   await ensureProofServerPortReachable(config.proofServer);
 
   const seed = Buffer.from(await bip39.mnemonicToSeed(mnemonic));
-  const walletCtx = await initWalletWithSeed(seed, config);
+  const walletCtx = await initWalletWithSeed(seed, config, { deriveKeyIndex: deriveKeyIndexFromEnv() });
 
   await waitForWalletSyncedWithHeartbeat(walletCtx.wallet);
 

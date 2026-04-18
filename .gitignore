@@ -1,6 +1,10 @@
 node_modules
 .env
 .local-orderbook.json
+.perps-order-index.json
+.perps-resting-book.json
+.perps-backups/
+perps-web/dist
 dist
 contract/dist
 charli3perp-local-cli/dist

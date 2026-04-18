@@ -1,3 +1,5 @@
+import "./load_repo_env.js";
+
 /**
  * Wallet bootstrap for Midnight **undeployed** (local Docker) or **preprod** (public RPC).
  * Preprod URLs align with https://docs.midnight.network/guides/deploy-mn-app
@@ -14,6 +16,7 @@ import * as ledger from "@midnight-ntwrk/ledger-v8";
 import type { DefaultDustConfiguration as DustConfiguration } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import { MidnightBech32m, ShieldedAddress, UnshieldedAddress } from "@midnight-ntwrk/wallet-sdk-address-format";
 import { HDWallet, Roles } from "@midnight-ntwrk/wallet-sdk-hd";
 import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
 import type { DefaultShieldedConfiguration as ShieldedConfiguration } from "@midnight-ntwrk/wallet-sdk-shielded";
@@ -44,12 +47,86 @@ function walletStateDisabled(): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
-function resolveWalletStateFile(seed: Buffer, networkId: string): string {
-  const id = createHash("sha256").update(seed).digest("hex").slice(0, 32);
+function resolveWalletStateFile(seed: Buffer, networkId: string, deriveKeyIndex: number): string {
+  const id = createHash("sha256")
+    .update(seed)
+    .update(Buffer.from(`derive:${deriveKeyIndex}`, "utf8"))
+    .digest("hex")
+    .slice(0, 32);
   const base =
     process.env.MIDNIGHT_WALLET_STATE_DIR?.trim() ||
     path.resolve(__dirname, "../../.midnight-wallet-state");
   return path.join(base, networkId, `${id}.json`);
+}
+
+/** HD composite key index for `deriveKeysAt` (default from `MIDNIGHT_DERIVE_KEY_INDEX`, usually `0`). */
+export function deriveKeyIndexFromEnv(): number {
+  const raw = process.env.MIDNIGHT_DERIVE_KEY_INDEX?.trim();
+  if (!raw) return 0;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) {
+    console.warn(`[midnight wallet] Invalid MIDNIGHT_DERIVE_KEY_INDEX=${raw}, using 0`);
+    return 0;
+  }
+  return n;
+}
+
+export type InitWalletSeedOptions = {
+  /** Passed to `CompositeRoleKey#deriveKeysAt` — same mnemonic, different Midnight identities. */
+  deriveKeyIndex?: number;
+};
+
+export type DerivedMidnightReceiveAddresses = {
+  shieldedStr: string;
+  unshieldedStr: string;
+  shieldedDecoded: ShieldedAddress;
+  unshieldedDecoded: UnshieldedAddress;
+};
+
+/**
+ * Shielded + unshielded receive addresses for `deriveKeysAt(index)` (same path as {@link initWalletWithSeed}),
+ * from HD keys only — no indexer connection or sync. Uses {@link ShieldedWallet.getAddress} (deterministic from keys).
+ */
+export async function deriveMidnightReceiveAddressesFromSeed(
+  seed: Buffer,
+  midnight: Charli3perpMidnightConfig,
+  deriveKeyIndex: number,
+): Promise<DerivedMidnightReceiveAddresses> {
+  const hdWallet = HDWallet.fromSeed(Uint8Array.from(seed));
+  if (hdWallet.type !== "seedOk") {
+    throw new Error("Failed to initialize HDWallet");
+  }
+  const derivationResult = hdWallet.hdWallet
+    .selectAccount(0)
+    .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
+    .deriveKeysAt(deriveKeyIndex);
+  if (derivationResult.type !== "keysDerived") {
+    throw new Error("Failed to derive keys");
+  }
+  hdWallet.hdWallet.clear();
+
+  const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(derivationResult.keys[Roles.Zswap]);
+  const unshieldedKeystore = createKeystore(derivationResult.keys[Roles.NightExternal], midnight.networkId);
+
+  const baseConfiguration: ShieldedConfiguration & DustConfiguration = {
+    networkId: midnight.networkId,
+    costParameters: {
+      additionalFeeOverhead: midnight.shieldedAdditionalFeeOverhead,
+      feeBlocksMargin: 5,
+    },
+    indexerClientConnection: {
+      indexerHttpUrl: midnight.indexer,
+      indexerWsUrl: midnight.indexerWS,
+    },
+  };
+
+  const shieldedOnly = ShieldedWallet(baseConfiguration).startWithSecretKeys(shieldedSecretKeys);
+  const shieldedAddr = await shieldedOnly.getAddress();
+  const shieldedStr = MidnightBech32m.encode(midnight.networkId, shieldedAddr).toString();
+  const unshieldedStr = unshieldedKeystore.getBech32Address().toString();
+  const shieldedDecoded = MidnightBech32m.parse(shieldedStr).decode(ShieldedAddress, midnight.networkId);
+  const unshieldedDecoded = MidnightBech32m.parse(unshieldedStr).decode(UnshieldedAddress, midnight.networkId);
+  return { shieldedStr, unshieldedStr, shieldedDecoded, unshieldedDecoded };
 }
 
 export type WalletContext = {
@@ -87,22 +164,37 @@ export async function persistMidnightWalletState(ctx: WalletContext): Promise<vo
   };
   await mkdir(path.dirname(c.file), { recursive: true });
   await writeFile(c.file, JSON.stringify(payload), "utf8");
+  console.log(
+    "[midnight wallet] Saved sync state to",
+    path.relative(process.cwd(), c.file),
+    "— next run replays from this snapshot (faster sync).",
+  );
 }
 
 export async function initWalletWithSeed(
   seed: Buffer,
   midnight: Charli3perpMidnightConfig,
+  opts: InitWalletSeedOptions = {},
 ): Promise<WalletContext> {
+  const deriveKeyIndex =
+    typeof opts.deriveKeyIndex === "number" && Number.isFinite(opts.deriveKeyIndex) && opts.deriveKeyIndex >= 0
+      ? Math.floor(opts.deriveKeyIndex)
+      : 0;
+
   const hdWallet = HDWallet.fromSeed(Uint8Array.from(seed));
 
   if (hdWallet.type !== "seedOk") {
     throw new Error("Failed to initialize HDWallet");
   }
 
+  if (deriveKeyIndex > 0) {
+    console.log(`[midnight wallet] Using HD deriveKeysAt(${deriveKeyIndex}) (set MIDNIGHT_DERIVE_KEY_INDEX to reuse)`);
+  }
+
   const derivationResult = hdWallet.hdWallet
     .selectAccount(0)
     .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
-    .deriveKeysAt(0);
+    .deriveKeysAt(deriveKeyIndex);
 
   if (derivationResult.type !== "keysDerived") {
     throw new Error("Failed to derive keys");
@@ -143,7 +235,12 @@ export async function initWalletWithSeed(
     },
   };
 
-  const stateFile = walletStateDisabled() ? null : resolveWalletStateFile(seed, midnight.networkId);
+  const stateFile = walletStateDisabled() ? null : resolveWalletStateFile(seed, midnight.networkId, deriveKeyIndex);
+  if (walletStateDisabled()) {
+    console.log(
+      "[midnight wallet] MIDNIGHT_WALLET_STATE_DISABLE=1 — ignoring .midnight-wallet-state cache; full indexer sync (use when sync hangs on restore).",
+    );
+  }
 
   let persisted: PersistedWalletV1 | null = null;
   if (stateFile) {

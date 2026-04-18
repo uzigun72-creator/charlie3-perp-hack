@@ -10,7 +10,6 @@
  */
 import "./load_repo_env.js";
 import { Buffer } from 'buffer';
-import WebSocket from 'ws';
 import * as bip39 from 'bip39';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import {
@@ -35,15 +34,13 @@ import {
   configureCharli3perpLiquidationProviders,
   configureCharli3perpAggregateProviders,
 } from './providers.js';
-import { initWalletWithSeed, persistMidnightWalletState } from './wallet.js';
+import { deriveKeyIndexFromEnv, initWalletWithSeed, persistMidnightWalletState } from './wallet.js';
 import { traderLedgerPublicKey } from './trader-key.js';
 import { ensureDustReady } from './dust.js';
 import { waitForWalletSyncedWithHeartbeat } from './wait_wallet_sync.js';
 import { hashSingle32, hashPair32 } from './midnight-hash.js';
 import { performance } from 'node:perf_hooks';
 import { ensureProofServerPortReachable, printProvingFailureHints } from './proof_server_preflight.js';
-
-(globalThis as any).WebSocket = WebSocket;
 
 type BenchStep = { label: string; ms: number };
 
@@ -80,6 +77,7 @@ function logTx(label: string, pub: { txId: unknown; txHash: unknown; blockHeight
 }
 
 async function main(): Promise<void> {
+  const fullWallT0 = performance.now();
   const mnemonic = process.env.BIP39_MNEMONIC;
   if (!mnemonic || !bip39.validateMnemonic(mnemonic)) {
     console.error('Set valid BIP39_MNEMONIC');
@@ -91,7 +89,7 @@ async function main(): Promise<void> {
   await ensureProofServerPortReachable(config.proofServer);
 
   const seed = Buffer.from(await bip39.mnemonicToSeed(mnemonic));
-  const walletCtx = await initWalletWithSeed(seed, config);
+  const walletCtx = await initWalletWithSeed(seed, config, { deriveKeyIndex: deriveKeyIndexFromEnv() });
 
   await waitForWalletSyncedWithHeartbeat(walletCtx.wallet);
 
@@ -99,7 +97,10 @@ async function main(): Promise<void> {
   await ensureDustReady(walletCtx, { timeoutMs: 240_000 });
   console.log('DUST ready.');
 
+  // Checkpoint after sync+DUST so a failure mid-pipeline still leaves a restorable wallet snapshot.
   await persistMidnightWalletState(walletCtx);
+
+  const contractsWallT0 = performance.now();
 
   const traderSk = hexToBytes32(process.env.C3PERP_TRADER_SK_HEX ?? '03'.repeat(32));
   const traderPk = traderLedgerPublicKey(traderSk);
@@ -229,22 +230,47 @@ async function main(): Promise<void> {
       .public,
   );
 
+  const contractsWallMs = performance.now() - contractsWallT0;
+  const fullWallMs = performance.now() - fullWallT0;
+
+  // Second snapshot: includes all deploy/call traffic — next run replays from disk and catches up faster.
+  console.log('[midnight wallet] Saving sync state after full pipeline (shielded/dust/unshielded)…');
+  await persistMidnightWalletState(walletCtx);
+
   await walletCtx.wallet.stop();
   console.log('Done. Midnight five-contract pipeline submitted.');
 
   const totalProveMs = benchSteps.reduce((a, s) => a + s.ms, 0);
+  const zkPps =
+    totalProveMs > 0 ? Math.round((benchSteps.length / (totalProveMs / 1000)) * 1000) / 1000 : 0;
+  const contractsPerMin =
+    contractsWallMs > 0 ? Math.round((60_000 / contractsWallMs) * 1000) / 1000 : 0;
   const benchPayload = {
     kind: 'charli3perp-pipeline-bench',
     captured_at: new Date().toISOString(),
     midnight_network: process.env.MIDNIGHT_DEPLOY_NETWORK ?? 'undeployed',
     proof_server: process.env.MIDNIGHT_PROOF_SERVER ?? 'default',
+    derive_key_index: deriveKeyIndexFromEnv(),
     hardware_note: process.env.BENCH_HARDWARE_NOTE ?? '',
+    /** Wall time: 5× deploy + all contract calls (ZK prove + submit), excluding wallet sync/DUST. */
+    contracts_wall_ms: Math.round(contractsWallMs * 1000) / 1000,
+    /** Wall time: entire CLI run including sync + DUST + five contracts. */
+    full_run_wall_ms: Math.round(fullWallMs * 1000) / 1000,
     steps: benchSteps,
     total_zk_wall_ms: Math.round(totalProveMs * 1000) / 1000,
     sequential_zk_steps: benchSteps.length,
-    sequential_proofs_per_second:
-      totalProveMs > 0 ? Math.round((benchSteps.length / (totalProveMs / 1000)) * 1000) / 1000 : 0,
+    sequential_proofs_per_second: zkPps,
+    /** Rough throughput: full 5-contract pipeline runs per minute (deploy + proves). */
+    estimated_full_pipeline_runs_per_minute: contractsPerMin,
   };
+
+  const summary =
+    `[pipeline-bench] contracts(5) wall=${benchPayload.contracts_wall_ms} ms | ` +
+    `zk-only sum=${benchPayload.total_zk_wall_ms} ms (${benchSteps.length} proves, ${zkPps} proves/s) | ` +
+    `full run=${benchPayload.full_run_wall_ms} ms (sync+DUST+contracts) | ` +
+    `~${contractsPerMin} pipeline runs/min (contracts segment only)`;
+  console.log(summary);
+
   if (process.env.C3PERP_PIPELINE_BENCH_JSON === '1') {
     console.log(JSON.stringify(benchPayload, null, 2));
   }

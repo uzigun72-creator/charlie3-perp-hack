@@ -1,4 +1,4 @@
-import { createAppLucid } from "./lucid_wallet.js";
+import { createAppLucid, type AppLucid } from "./lucid_wallet.js";
 import { cardanoBackend } from "../config/cardano_env.js";
 import { charli3KupoUrl, feedConfigForPair } from "../charli3/config.js";
 import { listUnspentC3asMatches } from "../charli3/kupo_client.js";
@@ -12,6 +12,7 @@ function explorerTxUrl(txHash: string): string {
 /** Submit Preprod tx that `readFrom` latest C3AS oracle UTxO for the pair. */
 export async function submitCharli3OracleReferenceTx(
   pairId: string,
+  opts?: { lucid?: AppLucid },
 ): Promise<{ txHash: string; explorerUrl: string; oracleRef: { txHash: string; outputIndex: number } }> {
   if (cardanoBackend() !== "blockfrost") {
     throw new Error("submitCharli3OracleReferenceTx requires CARDANO_BACKEND=blockfrost");
@@ -22,9 +23,12 @@ export async function submitCharli3OracleReferenceTx(
   if (matches.length === 0) {
     throw new Error(`No unspent C3AS UTxOs for ${pairId}`);
   }
-  const best = [...matches].sort((a, b) => b.created_at.slot_no - a.created_at.slot_no)[0]!;
+  let best = matches[0]!;
+  for (const m of matches) {
+    if (m.created_at.slot_no > best.created_at.slot_no) best = m;
+  }
 
-  const lucid = await createAppLucid();
+  const lucid = opts?.lucid ?? (await createAppLucid());
   const refs = await lucid.utxosByOutRef([
     { txHash: best.transaction_id, outputIndex: best.output_index },
   ]);

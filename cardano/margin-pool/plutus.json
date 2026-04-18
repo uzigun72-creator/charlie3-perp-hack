@@ -1,0 +1,222 @@
+{
+  "preamble": {
+    "title": "charli3perp/margin-pool",
+    "description": "Margin vault + pooled collateral validators (opening margin merges into pool UTxO).",
+    "version": "0.1.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.21+42babe5"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "margin_pool.margin_pool.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/margin_types~1PoolDatum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/margin_types~1PoolRedeemer"
+        }
+      },
+      "compiledCode": "5906b401010029800aba2aba1aba0aab9faab9eaab9dab9a488888896600264653001300800198041804800cdc3a400530080024888966002600460106ea800e2653001300d00198069807000cdc3a400091119912cc004c00c006264b300130140018992cc004c014c040dd5000c4c8c8cc896600260320070088b202c375a602c0026eb8c058008c058004c044dd5000c5900f1809800c5901118079baa00a8acc004c02000626464b300130150028024590121bad3013001300f37540151640348068566002600260186ea800a330013010300d37540052323322330020020012259800800c00e2646644b3001337229101000028acc004cdc7a441000028800c01901244cc014014c0600110121bae3011001375a602400260280028090c8c8cc004004010896600200300389919912cc004cdc8a441000028acc004cdc7a441000028800c01901344cc014014c0640110131bae301200137566026002602a002809852f5bded8c02900048c044c0480064602260246024602460240032301130123012301230123012001912cc004c00cc038dd500144c8c8c8c8c8ca60026eb8c0600066eb8c06001a6eb8c0600166eb8c0600126eb4c06000e6eb4c06000922222259800980f803c0362c80e06030002602e002602c002602a0026028002601e6ea800a2c806a44646600200200644b30010018a60103d87a80008992cc004c010006266e952000330140014bd7044cc00c00cc058009010180a000a02492cc004c01cc034dd5000c4cdd2a4000660206022601c6ea80052f5c114c0103d87a8000403123011301230120019b8748012460226024602460240029111111111119912cc004c038c064dd500ac4c8c966002602060366ea800626464b30013012301d375400315980099b8f375c6042603c6ea8004dd71807980f1baa0118992cc004cdc42400000313259800980a180f9baa001899192cc004c030c084dd5000c4c966002602e60446ea8006264b30013028001899198098008acc004cdc79bae3028302537540026eb8c0a0c094dd500c456600266e3cdd7180b18129baa001375c602c604a6ea80622b30013371e6eb8c040c094dd50009bae30103025375403115980099b8f375c6028604a6ea8004dd7180a18129baa0188acc004cdc39bad30153025375400266e00dd6980a98129baa0184800a2b30013370e6eb4c038c094dd500099b80375a601c604a6ea806001e2b30013371266e00c05cdd5980b18129baa3300d37586050604a6ea807406c01cc05cdd5980b18129baa0058a518b20468b20468b20468b20468b20468b20468b204630270018b204a30233754003164084604a60446ea80062c8100c030c084dd5000981198101baa0018b203c3300637586014603e6ea805cdd71811180f9baa0128b203a30103756601e603c6ea8c03cc078dd500145901c45901c18049810180e9baa3020301d3754601c603a6ea8004c07cc070dd5000c5901a198041bac301e301b3754026466ebcc07cc070dd5000801180e980d1baa0158992cc004cdc42400000315980099b89001375a600860366ea803a2b300132330010013758603e6040604060406040604060406040604060386ea8050896600200314a115980099b8f375c60400026eb8c020c074dd50084528c4cc008008c08400501b203c8992cc004c040c06cdd5000c4c8c9660026010603a6ea8006264b30013013301e3754003132598009812000c4c8cc03c00456600266e3cdd7181218109baa001375c604860426ea80522b30013371e6eb8c048c084dd50009bae30123021375402915980099b8f375c601860426ea8004dd7180618109baa0148acc004cdc79bae3010302137540026eb8c040c084dd500a456600266e1cdd6980898109baa001375a602260426ea80522b30013370e6eb4c028c084dd500099b81375a601460426ea805001e2b30013371266e04c04cdd5980918109baa330093758604860426ea806405c01cc04cdd5980918109baa0058a518b203e8b203e8b203e8b203e8b203e8b203e8b203e30230018b2042301f37540031640746042603c6ea80062c80e0c020c074dd5000980f980e1baa0018b2034330023758600c60366ea804cdd7180f180d9baa00e8b20328b20328b2032375a603a60346ea8055018111919800800801912cc0040062d1325980099baf3020301d37540020091300e301d37540031330030033021002406c603e00280e888cc01c0088c966002602060366ea80062b30013371e6eb8c07cc070dd5000801c566002600c60366ea8c01cc070dd50014528c52820348a50406914a080d0c01cc078c06cdd5180f180d9baa00145900b18061baa00818049baa0038b200e180400098019baa0088a4d13656400401",
+      "hash": "a84d60a429ad914fa4ced7e3622c444327cf185bfb56e4e4d7f86254"
+    },
+    {
+      "title": "margin_pool.margin_pool.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "5906b401010029800aba2aba1aba0aab9faab9eaab9dab9a488888896600264653001300800198041804800cdc3a400530080024888966002600460106ea800e2653001300d00198069807000cdc3a400091119912cc004c00c006264b300130140018992cc004c014c040dd5000c4c8c8cc896600260320070088b202c375a602c0026eb8c058008c058004c044dd5000c5900f1809800c5901118079baa00a8acc004c02000626464b300130150028024590121bad3013001300f37540151640348068566002600260186ea800a330013010300d37540052323322330020020012259800800c00e2646644b3001337229101000028acc004cdc7a441000028800c01901244cc014014c0600110121bae3011001375a602400260280028090c8c8cc004004010896600200300389919912cc004cdc8a441000028acc004cdc7a441000028800c01901344cc014014c0640110131bae301200137566026002602a002809852f5bded8c02900048c044c0480064602260246024602460240032301130123012301230123012001912cc004c00cc038dd500144c8c8c8c8c8ca60026eb8c0600066eb8c06001a6eb8c0600166eb8c0600126eb4c06000e6eb4c06000922222259800980f803c0362c80e06030002602e002602c002602a0026028002601e6ea800a2c806a44646600200200644b30010018a60103d87a80008992cc004c010006266e952000330140014bd7044cc00c00cc058009010180a000a02492cc004c01cc034dd5000c4cdd2a4000660206022601c6ea80052f5c114c0103d87a8000403123011301230120019b8748012460226024602460240029111111111119912cc004c038c064dd500ac4c8c966002602060366ea800626464b30013012301d375400315980099b8f375c6042603c6ea8004dd71807980f1baa0118992cc004cdc42400000313259800980a180f9baa001899192cc004c030c084dd5000c4c966002602e60446ea8006264b30013028001899198098008acc004cdc79bae3028302537540026eb8c0a0c094dd500c456600266e3cdd7180b18129baa001375c602c604a6ea80622b30013371e6eb8c040c094dd50009bae30103025375403115980099b8f375c6028604a6ea8004dd7180a18129baa0188acc004cdc39bad30153025375400266e00dd6980a98129baa0184800a2b30013370e6eb4c038c094dd500099b80375a601c604a6ea806001e2b30013371266e00c05cdd5980b18129baa3300d37586050604a6ea807406c01cc05cdd5980b18129baa0058a518b20468b20468b20468b20468b20468b20468b204630270018b204a30233754003164084604a60446ea80062c8100c030c084dd5000981198101baa0018b203c3300637586014603e6ea805cdd71811180f9baa0128b203a30103756601e603c6ea8c03cc078dd500145901c45901c18049810180e9baa3020301d3754601c603a6ea8004c07cc070dd5000c5901a198041bac301e301b3754026466ebcc07cc070dd5000801180e980d1baa0158992cc004cdc42400000315980099b89001375a600860366ea803a2b300132330010013758603e6040604060406040604060406040604060386ea8050896600200314a115980099b8f375c60400026eb8c020c074dd50084528c4cc008008c08400501b203c8992cc004c040c06cdd5000c4c8c9660026010603a6ea8006264b30013013301e3754003132598009812000c4c8cc03c00456600266e3cdd7181218109baa001375c604860426ea80522b30013371e6eb8c048c084dd50009bae30123021375402915980099b8f375c601860426ea8004dd7180618109baa0148acc004cdc79bae3010302137540026eb8c040c084dd500a456600266e1cdd6980898109baa001375a602260426ea80522b30013370e6eb4c028c084dd500099b81375a601460426ea805001e2b30013371266e04c04cdd5980918109baa330093758604860426ea806405c01cc04cdd5980918109baa0058a518b203e8b203e8b203e8b203e8b203e8b203e8b203e30230018b2042301f37540031640746042603c6ea80062c80e0c020c074dd5000980f980e1baa0018b2034330023758600c60366ea804cdd7180f180d9baa00e8b20328b20328b2032375a603a60346ea8055018111919800800801912cc0040062d1325980099baf3020301d37540020091300e301d37540031330030033021002406c603e00280e888cc01c0088c966002602060366ea80062b30013371e6eb8c07cc070dd5000801c566002600c60366ea8c01cc070dd50014528c52820348a50406914a080d0c01cc078c06cdd5180f180d9baa00145900b18061baa00818049baa0038b200e180400098019baa0088a4d13656400401",
+      "hash": "a84d60a429ad914fa4ced7e3622c444327cf185bfb56e4e4d7f86254"
+    },
+    {
+      "title": "margin_vault.margin_vault.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/margin_types~1MarginDatum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/margin_types~1MarginRedeemer"
+        }
+      },
+      "compiledCode": "59012f01010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cc01c0092225980099b8748008c01cdd500144c8cc8a60022b30013001300a375400519800980698059baa0029180718079807980798079807980798079807800c88c8cc00400400c896600200314a115980098019bae30110018a518998010011809000a01a40409112cc004c010c034dd5004c4cc004dd6180118071baa00723371e0026eb8c044c03cdd500244cc004dd6180118071baa00723371e0026eb8c044c03cdd500220184590094c028dd50034c03400d2225980098020014566002601c6ea802600716403d15980099b874800800a2b3001300e37540130038b201e8b20184030300b300c001370e900018041baa0028b200c180380098019baa0078a4d13656400401",
+      "hash": "3a0afea0203227428eafcaca7ba2dcadfcd3f59bb2a768469a041326"
+    },
+    {
+      "title": "margin_vault.margin_vault.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "59012f01010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cc01c0092225980099b8748008c01cdd500144c8cc8a60022b30013001300a375400519800980698059baa0029180718079807980798079807980798079807800c88c8cc00400400c896600200314a115980098019bae30110018a518998010011809000a01a40409112cc004c010c034dd5004c4cc004dd6180118071baa00723371e0026eb8c044c03cdd500244cc004dd6180118071baa00723371e0026eb8c044c03cdd500220184590094c028dd50034c03400d2225980098020014566002601c6ea802600716403d15980099b874800800a2b3001300e37540130038b201e8b20184030300b300c001370e900018041baa0028b200c180380098019baa0078a4d13656400401",
+      "hash": "3a0afea0203227428eafcaca7ba2dcadfcd3f59bb2a768469a041326"
+    }
+  ],
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "aiken/crypto/VerificationKeyHash": {
+      "title": "VerificationKeyHash",
+      "dataType": "bytes"
+    },
+    "cardano/transaction/OutputReference": {
+      "title": "OutputReference",
+      "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
+      "anyOf": [
+        {
+          "title": "OutputReference",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "transaction_id",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "margin_types/MarginDatum": {
+      "title": "MarginDatum",
+      "description": "User margin locked at `margin_vault` before merge into the pool.",
+      "anyOf": [
+        {
+          "title": "MarginDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "description": "Must sign any spend (refund or forward to pool).",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            },
+            {
+              "title": "market_id",
+              "description": "Opaque market id (e.g. UTF-8 \"ADA-USD\").",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "position_nonce",
+              "description": "Unique nonce for this deposit.",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "order_commitment",
+              "description": "32-byte order commitment (Midnight / off-chain ticket), may be empty.",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "margin_types/MarginRedeemer": {
+      "title": "MarginRedeemer",
+      "anyOf": [
+        {
+          "title": "Refund",
+          "description": "Unlock to arbitrary outputs — owner must co-sign.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "ForwardToPool",
+          "description": "Spend into same tx as `margin_pool` merge — owner must co-sign.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "margin_types/PoolDatum": {
+      "title": "PoolDatum",
+      "description": "Singleton pool UTxO: aggregate margin accounting (ADA-only v1).",
+      "anyOf": [
+        {
+          "title": "PoolDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "pool_script_hash",
+              "description": "Blake2b-224 hash of this pool spending script (continuing outputs must use this credential).",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "margin_script_hash",
+              "description": "Expected `margin_vault` script hash for inputs merged via `MergeDeposit`.",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "admin",
+              "description": "Can authorize `WithdrawClose`.",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            },
+            {
+              "title": "total_margin_lovelace",
+              "description": "Sum of merged margin (lovelace) — informational; must match merge steps.",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "merge_count",
+              "description": "Number of successful merges.",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "positions_root",
+              "description": "Merkle root of open positions (opaque v1).",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "margin_types/PoolRedeemer": {
+      "title": "PoolRedeemer",
+      "anyOf": [
+        {
+          "title": "MergeDeposit",
+          "description": "Spend pool + the margin UTxO identified by this reference (robust when fee inputs reorder `inputs`).",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "margin_ref",
+              "$ref": "#/definitions/cardano~1transaction~1OutputReference"
+            }
+          ]
+        },
+        {
+          "title": "WithdrawClose",
+          "description": "Admin reduces pooled total; pool continues at same script with lower `total_margin_lovelace`.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "withdraw_lovelace",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

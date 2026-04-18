@@ -28,6 +28,17 @@
  *   (same BIP39 / trader keys as order-only; order commitment for Cardano = bid leg)
  */
 import "dotenv/config";
+
+/** Same mapping as `perps-web/server/loadEnv.ts` — CLI reads `C3PERP_*`, repo often has `ZKPERPS_*`. */
+(() => {
+  const t = process.env.C3PERP_TRADER_SK_HEX?.trim() || process.env.ZKPERPS_TRADER_SK_HEX?.trim();
+  if (t) process.env.C3PERP_TRADER_SK_HEX = t;
+  const oc =
+    process.env.C3PERP_ORDER_COMMITMENT_HEX?.trim() ||
+    process.env.ZKPERPS_ORDER_COMMITMENT_HEX?.trim();
+  if (oc) process.env.C3PERP_ORDER_COMMITMENT_HEX = oc;
+})();
+
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,7 +137,7 @@ async function stepMidnight(l1Hex: string, oracle?: VerifiedIndexPrice): Promise
   const mnemonic = process.env.BIP39_MNEMONIC?.trim();
   if (!mnemonic) throw new Error("Set BIP39_MNEMONIC for Midnight Preview.");
 
-  const mode = (process.env.MIDNIGHT_RUN_MODE || "order-only").trim();
+  const mode = (process.env.MIDNIGHT_RUN_MODE || "full-pipeline").trim();
   const useFullPipeline = mode === "full-pipeline";
 
   let witnessEnv: Record<string, string> = {};
@@ -141,7 +152,7 @@ async function stepMidnight(l1Hex: string, oracle?: VerifiedIndexPrice): Promise
     if (!bidJson || !askJson) {
       throw new Error(
         "MIDNIGHT_RUN_MODE=full-pipeline requires C3PERP_BID_ORDER_JSON and C3PERP_ASK_ORDER_JSON (JSON OrderCommitmentInput each). " +
-          "Or use MIDNIGHT_RUN_MODE=order-only (or unset MIDNIGHT_RUN_MODE) with C3PERP_ORDER_COMMITMENT_HEX for the fast charli3perp-order path.",
+          "Or set MIDNIGHT_RUN_MODE=order-only with C3PERP_ORDER_COMMITMENT_HEX for the fast charli3perp-order-only path (no on-chain matching contract).",
       );
     }
     const bid = parseOrderCommitmentJson(bidJson);
@@ -288,7 +299,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "midnight") {
-    const mode = (process.env.MIDNIGHT_RUN_MODE || "order-only").trim();
+    const mode = (process.env.MIDNIGHT_RUN_MODE || "full-pipeline").trim();
     if (mode === "full-pipeline") {
       const { v, l1 } = await stepOracle();
       const l1Hex = process.env.C3PERP_L1_ANCHOR_HEX?.trim() || l1;

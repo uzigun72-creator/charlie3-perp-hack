@@ -1,6 +1,6 @@
 /**
  * Fail fast when `MIDNIGHT_PROOF_SERVER` points at localhost but nothing is listening
- * (typical: forgot `npm run proof-server`). Hosted Preview/Preprod URLs are not probed.
+ * (typical: forgot `npm run proof-server`). Non-local URLs are not probed.
  */
 import net from "node:net";
 
@@ -43,7 +43,7 @@ export async function ensureProofServerPortReachable(proofServerUrl: string): Pr
       `Proof server not reachable at ${proofServerUrl} (${msg}).\n` +
         `  • Start local prover: from repo root run  npm run proof-server  (Docker :6300, image midnightntwrk/proof-server:8.0.3)\n` +
         `  • Then: export MIDNIGHT_PROOF_SERVER=http://127.0.0.1:6300\n` +
-        `  • Or use Midnight hosted prover: unset MIDNIGHT_PROOF_SERVER  (Preview uses lace-proof-pub.preview.midnight.network)\n` +
+        `  • Or use Midnight hosted prover:  export MIDNIGHT_PROOF_SERVER=https://lace-proof-pub.preview.midnight.network  (Preview)\n` +
         `  • Skip this check: MIDNIGHT_SKIP_PROOF_PREFLIGHT=1`,
     );
   });
@@ -55,7 +55,7 @@ export function printProvingFailureHints(err: unknown): void {
   console.error(`
 If proving failed:
   1) Local Docker prover —  npm run proof-server  then  MIDNIGHT_PROOF_SERVER=http://127.0.0.1:6300
-  2) Hosted Preview — leave MIDNIGHT_PROOF_SERVER unset (or set to lace-proof-pub URL from midnight_network.ts)
+  2) Hosted Preview —  export MIDNIGHT_PROOF_SERVER=https://lace-proof-pub.preview.midnight.network  (or preprod lace URL)
   3) Match proof-server to ledger — use image  midnightntwrk/proof-server:8.0.3  (see package.json "proof-server" script)
   4) Increase timeout — some proofs need minutes; avoid killing the process early
 `);

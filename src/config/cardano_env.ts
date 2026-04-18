@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 export type CardanoBackend = "blockfrost" | "emulator";
 
 export function cardanoBackend(): CardanoBackend {
@@ -35,4 +33,21 @@ export function walletMnemonic(): string {
   const m = process.env.WALLET_MNEMONIC?.trim();
   if (!m) throw new Error("Set WALLET_MNEMONIC (testnet wallet)");
   return m;
+}
+
+/** When true, matched trades lock `MARGIN_POOL_COLLATERAL_LOVELACE` via margin_vault → margin_pool before Midnight. */
+export function cardanoCollateralViaMarginPool(): boolean {
+  return process.env.CARDANO_COLLATERAL_VIA_MARGIN_POOL === "1";
+}
+
+/** Lovelace locked per trade when `CARDANO_COLLATERAL_VIA_MARGIN_POOL=1` (not derived from USD margin in v1). */
+export function marginPoolCollateralLovelace(): bigint {
+  const raw = process.env.MARGIN_POOL_COLLATERAL_LOVELACE?.trim();
+  if (!raw) return 2_000_000n;
+  return BigInt(raw);
+}
+
+/** When `1`, `POST /api/trade/submit` may use `X-Cardano-Payer: user` for client-signed Charli3 + anchor (after Midnight). */
+export function allowUserPaysCardanoL1(): boolean {
+  return process.env.ALLOW_USER_PAYS_CARDANO_L1 === "1";
 }

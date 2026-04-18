@@ -9,8 +9,17 @@
     "deploy": "tsx src/deploy-charli3perp-order.ts",
     "run-all": "tsx src/run-charli3perp-all.ts",
     "run-pipeline": "tsx src/run-pipeline-all.ts",
+    "run-pipeline-split": "tsx src/run-pipeline-split-all.ts",
+    "run-pipeline-split-slot": "tsx src/run-pipeline-split-slot.ts",
     "print-midnight-address": "tsx src/print-midnight-address.ts",
-    "fund-local-undeployed": "tsx src/fund-local-undeployed.ts"
+    "midnight-wallet-balance": "tsx src/midnight-wallet-balance.ts",
+    "fund-local-undeployed": "tsx src/fund-local-undeployed.ts",
+    "fund-derived-wallets": "tsx src/midnight-fund-derived-wallets.ts",
+    "sync-derived-wallets": "tsx src/midnight-sync-derived-wallets.ts",
+    "parallel-cli": "tsx src/midnight-parallel-cli.ts",
+    "bench:parallel-pipeline": "env C3PERP_PIPELINE_BENCH_LOG=1 MIDNIGHT_PARALLEL_SCRIPT=run-pipeline MIDNIGHT_PARALLEL_BENCH_JSON=1 tsx src/midnight-parallel-cli.ts",
+    "sync-bench": "tsx src/midnight-sync-bench.ts",
+    "bench:pipeline": "env C3PERP_PIPELINE_BENCH_LOG=1 C3PERP_PIPELINE_BENCH_JSON=1 tsx src/run-pipeline-all.ts"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-js": "^2.5.0",
