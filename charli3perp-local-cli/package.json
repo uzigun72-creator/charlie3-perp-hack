@@ -11,6 +11,7 @@
     "run-pipeline": "tsx src/run-pipeline-all.ts",
     "run-pipeline-split": "tsx src/run-pipeline-split-all.ts",
     "run-pipeline-split-slot": "tsx src/run-pipeline-split-slot.ts",
+    "split-parallel-smoke": "tsx src/split-parallel-smoke.ts",
     "print-midnight-address": "tsx src/print-midnight-address.ts",
     "midnight-wallet-balance": "tsx src/midnight-wallet-balance.ts",
     "fund-local-undeployed": "tsx src/fund-local-undeployed.ts",

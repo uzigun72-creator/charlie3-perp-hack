@@ -163,6 +163,17 @@ function fullPipelineNpmScript(): "run-pipeline" | "run-pipeline-split" {
   return "run-pipeline-split";
 }
 
+/** Wall-clock cap for `npm run run-pipeline*`. `0` = unlimited. Default 60m so a hung CLI does not block the API forever. */
+function midnightCliMaxMs(): number {
+  const raw = process.env.PERPS_MIDNIGHT_CLI_MAX_MS?.trim();
+  if (raw === "0" || raw === "") return 0;
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 60 * 60 * 1000;
+}
+
 function runMidnightCliCapture(
   env: NodeJS.ProcessEnv,
   script: "run-all" | "run-pipeline" | "run-pipeline-split",
@@ -175,15 +186,62 @@ function runMidnightCliCapture(
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const maxMs = midnightCliMaxMs();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      fn();
+    };
+
+    if (maxMs > 0) {
+      timer = setTimeout(() => {
+        const msg = `[perps-api] Midnight ${script} exceeded PERPS_MIDNIGHT_CLI_MAX_MS=${maxMs} (wall clock). Sending SIGTERM to npm child; orphan run-pipeline-split-slot workers may remain — pkill -f run-pipeline-split-slot if needed.`;
+        console.error(msg);
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
+        setTimeout(() => {
+          try {
+            if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+          } catch {
+            /* ignore */
+          }
+        }, 4000);
+        finish(() =>
+          reject(
+            new Error(
+              `Midnight ${script} timed out after ${maxMs}ms (PERPS_MIDNIGHT_CLI_MAX_MS). ` +
+                `Often: stuck wallet sync (indexer), proof server overload, or very slow Preview. ` +
+                `Try MIDNIGHT_WALLET_STATE_DISABLE=1, MIDNIGHT_SPLIT_PARALLEL=0, or raise the limit / 0=unlimited.`,
+            ),
+          ),
+        );
+      }, maxMs);
+    }
+
     child.stdout?.on("data", (d: Buffer) => {
       stdout += d.toString();
     });
     child.stderr?.on("data", (d: Buffer) => {
       stderr += d.toString();
     });
-    child.on("error", reject);
-    child.on("close", (exitCode) => {
-      resolve({ stdout: stdout + (stderr ? "\n" + stderr : ""), exitCode });
+    child.on("error", (e) => finish(() => reject(e)));
+    child.on("close", (exitCode, signal) => {
+      if (settled) return;
+      finish(() =>
+        resolve({
+          stdout:
+            stdout +
+            (stderr ? "\n" + stderr : "") +
+            (signal ? `\n[perps-api] npm child exited with signal ${signal}` : ""),
+          exitCode,
+        }),
+      );
     });
   });
 }
@@ -223,6 +281,15 @@ async function runMidnightWithRetries(
     );
   }
   return { stdout };
+}
+
+function pipelineTimingEnabled(): boolean {
+  return (process.env.PERPS_PIPELINE_TIMING ?? "").trim() === "1";
+}
+
+function logPipelinePhase(phase: string, startedAt: number): void {
+  if (!pipelineTimingEnabled()) return;
+  console.log(`[perps-pipeline-timing] ${phase}: ${Date.now() - startedAt}ms`);
 }
 
 /** Serialized for the browser to build Charli3 pull + settlement anchor after Midnight. */
@@ -285,6 +352,8 @@ export async function runFullPipelineTrade(
 ): Promise<FullTradeResult> {
   assertNetworks();
 
+  const pipelineT0 = Date.now();
+
   const mnemonic = opts.bip39Mnemonic?.trim() || process.env.BIP39_MNEMONIC?.trim();
   if (!mnemonic) {
     throw new Error("Set BIP39_MNEMONIC in .env or pass bip39Mnemonic for Midnight.");
@@ -338,9 +407,11 @@ export async function runFullPipelineTrade(
       orderCommitmentHex64: hex64,
       marketId: bid.pairId ?? PAIR,
     });
+    logPipelinePhase("margin_pool_lock", pipelineT0);
   }
 
   const v = opts.sharedOracle ?? (await getVerifiedIndexPrice(PAIR));
+  logPipelinePhase("oracle_fetch", pipelineT0);
   const l1 = l1AnchorHexFromOracle(v);
 
   const mode = (process.env.MIDNIGHT_RUN_MODE ?? "full-pipeline").trim();
@@ -374,6 +445,14 @@ export async function runFullPipelineTrade(
     C3PERP_L1_ANCHOR_HEX: l1,
     C3PERP_ORDER_COMMITMENT_HEX: orderCommitmentForCardano,
     ...midnightWorker,
+    // CLI `waitForWalletSyncedWithHeartbeat` can hang forever if unset — trade stays "pending" in UI with no error.
+    ...(process.env.MIDNIGHT_SYNC_TIMEOUT_MS?.trim()
+      ? {}
+      : { MIDNIGHT_SYNC_TIMEOUT_MS: "1200000" }),
+    // Split pipeline: five tsx workers in parallel unless MIDNIGHT_SPLIT_PARALLEL is set explicitly (e.g. `0` to debug).
+    ...(npmScript === "run-pipeline-split" && !process.env.MIDNIGHT_SPLIT_PARALLEL?.trim()
+      ? { MIDNIGHT_SPLIT_PARALLEL: "1" }
+      : {}),
     // Pin on-disk sync cache to repo `.midnight-wallet-state/` (per derive index) so restarts resync faster.
     ...(process.env.MIDNIGHT_WALLET_STATE_DISABLE?.trim() !== "1" &&
     !process.env.MIDNIGHT_WALLET_STATE_DIR?.trim()
@@ -394,6 +473,7 @@ export async function runFullPipelineTrade(
 
   if (userPaysCardano) {
     const { stdout } = await runMidnightWithRetries(env, npmScript);
+    logPipelinePhase("midnight_cli_user_pays_cardano", pipelineT0);
     const midnightBindTxHash = extractBindTxHash(stdout) ?? "";
     const midnightMatchingSealTxHash = useFullPipeline
       ? (extractMatchingSealTxHash(stdout) ?? "")
@@ -452,25 +532,38 @@ export async function runFullPipelineTrade(
 
   if (reusePullOk) {
     const mid = await runMidnightWithRetries(env, npmScript);
+    logPipelinePhase("midnight_cli_reuse_pull", pipelineT0);
     stdout = mid.stdout;
     pullTxHash = reusePull.toLowerCase();
     pullExplorer = preprodExplorerTxUrl(pullTxHash);
     lucidForAnchor = await createAppLucid();
+    logPipelinePhase("createAppLucid_after_reuse_pull", pipelineT0);
   } else if (parallelMidnightAndPull) {
     const lucid = await createAppLucid();
-    const [mid, pull] = await Promise.all([
-      runMidnightWithRetries(env, npmScript),
-      submitCharli3OracleReferenceTx(PAIR, { lucid }),
-    ]);
+    logPipelinePhase("createAppLucid_before_parallel_midnight_pull", pipelineT0);
+    const tParallel = Date.now();
+    const midnightP = runMidnightWithRetries(env, npmScript).then((r) => {
+      logPipelinePhase("midnight_cli_wall", tParallel);
+      return r;
+    });
+    const pullP = submitCharli3OracleReferenceTx(PAIR, { lucid }).then((r) => {
+      logPipelinePhase("charli3_pull_tx_wall", tParallel);
+      return r;
+    });
+    const [mid, pull] = await Promise.all([midnightP, pullP]);
+    logPipelinePhase("parallel_midnight_plus_charli3_total_wall", tParallel);
     stdout = mid.stdout;
     pullTxHash = pull.txHash;
     pullExplorer = pull.explorerUrl;
     lucidForAnchor = lucid;
   } else {
+    const tSeq = Date.now();
     const mid = await runMidnightWithRetries(env, npmScript);
+    logPipelinePhase("midnight_cli_sequential_first", tSeq);
     stdout = mid.stdout;
     const lucid = await createAppLucid();
     const pull = await submitCharli3OracleReferenceTx(PAIR, { lucid });
+    logPipelinePhase("charli3_pull_tx_sequential_after_midnight", tSeq);
     pullTxHash = pull.txHash;
     pullExplorer = pull.explorerUrl;
     lucidForAnchor = lucid;
@@ -498,6 +591,7 @@ export async function runFullPipelineTrade(
     network: { cardano: "preprod", midnight: "preview" },
   });
 
+  const tAnchor = Date.now();
   const anchor = await runExclusiveSettlementAnchor(() =>
     submitSettlementAnchorTx({
       settlementId,
@@ -506,6 +600,8 @@ export async function runFullPipelineTrade(
       lucid: lucidForAnchor,
     }),
   );
+  logPipelinePhase("settlement_anchor_submit", tAnchor);
+  logPipelinePhase("runFullPipelineTrade_total", pipelineT0);
 
   return {
     oracle: v,

@@ -26,7 +26,7 @@ import {
   runFullPipelineTrade,
   useMidnightMatchingContract,
 } from "./tradeOrchestrator.js";
-import { waitForTxVisible } from "./blockfrostPoll.js";
+import { cardanoConfirmFromHashesOrVisibility } from "./blockfrostPoll.js";
 import { getVerifiedIndexPrice, type VerifiedIndexPrice } from "../../src/charli3/price_feed.js";
 import {
   allowUserPaysCardanoL1,
@@ -376,8 +376,7 @@ app.post("/api/trade/user-l1-complete", async (c) => {
   if (entry.status !== "pending_user_l1") {
     return c.json({ error: "trade is not waiting for user L1 steps" }, 400);
   }
-  const pullOk = await waitForTxVisible(pull);
-  const anchorOk = await waitForTxVisible(anchor);
+  const { pullOk, anchorOk } = await cardanoConfirmFromHashesOrVisibility(pull, anchor);
   const bindOk = (entry.midnightBindTxHash?.length ?? 0) > 0;
   const matchOk =
     !useMidnightMatchingContract() || (entry.midnightMatchingSealTxHash?.length ?? 0) > 0;
@@ -595,8 +594,10 @@ async function runFullPipelineForBidAsk(
       };
     }
 
-    const pullOk = await waitForTxVisible(pipelineResult.charli3PullTxHash);
-    const anchorOk = await waitForTxVisible(pipelineResult.settlementAnchorTxHash);
+    const { pullOk, anchorOk } = await cardanoConfirmFromHashesOrVisibility(
+      pipelineResult.charli3PullTxHash,
+      pipelineResult.settlementAnchorTxHash,
+    );
     const bindOk = pipelineResult.midnightBindTxHash.length > 0;
     const matchOk =
       !useMidnightMatchingContract() || pipelineResult.midnightMatchingSealTxHash.length > 0;

@@ -37,6 +37,8 @@
     "midnight:fund-derived": "npm run fund-derived-wallets -w @charli3perp/cli",
     "midnight:balance": "npm run midnight-wallet-balance -w @charli3perp/cli",
     "midnight:sync-derived": "npm run sync-derived-wallets -w @charli3perp/cli",
+    "midnight:split-parallel-smoke": "npm run split-parallel-smoke -w @charli3perp/cli",
+    "diagnose:cardano-latency": "tsx scripts/diagnose-cardano-latency.ts",
     "midnight:parallel-cli": "npm run parallel-cli -w @charli3perp/cli",
     "bench:midnight:parallel-pipeline": "env C3PERP_PIPELINE_BENCH_LOG=1 MIDNIGHT_PARALLEL_SCRIPT=run-pipeline MIDNIGHT_PARALLEL_BENCH_JSON=1 npm run parallel-cli -w @charli3perp/cli",
     "bench:midnight:sync": "npm run sync-bench -w @charli3perp/cli",

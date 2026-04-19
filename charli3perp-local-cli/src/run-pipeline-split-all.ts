@@ -12,18 +12,16 @@
  * - `MIDNIGHT_SPLIT_PARALLEL` — `1` (default) parallel subprocesses; `0` sequential in-process
  */
 import "./load_repo_env.js";
-import { spawn } from "node:child_process";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Buffer } from "buffer";
 import * as bip39 from "bip39";
 import { deriveKeyIndexFromEnv } from "./wallet.js";
 import { loadSplitWitnessInputsFromEnv, runSplitPipelineSlot } from "./run_pipeline_split_slot_impl.js";
 import { ensureProofServerPortReachable, printProvingFailureHints } from "./proof_server_preflight.js";
+import { spawnSplitSlotProcess } from "./split_parallel_spawn.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-/** Monorepo root (`charlie3_hack/`) for `npm run -w @charli3perp/cli`. */
-const repoRoot = join(__dirname, "..", "..");
 
 function splitParallelFromEnv(): boolean {
   const v = process.env.MIDNIGHT_SPLIT_PARALLEL?.trim().toLowerCase();
@@ -33,7 +31,7 @@ function splitParallelFromEnv(): boolean {
 
 async function runFiveSlotsParallelSubprocesses(base: number): Promise<void> {
   console.log(
-    `[run-pipeline-split] parallel: 5 concurrent workers deriveKeysAt(${base})…(${base + 4}) (one npm subprocess per slot)`,
+    `[run-pipeline-split] parallel: 5 concurrent workers deriveKeysAt(${base})…(${base + 4}) (node+tsx per slot, not npm — avoids npm global lock)`,
   );
   const tasks = [0, 1, 2, 3, 4].map(
     (slot) =>
@@ -43,15 +41,10 @@ async function runFiveSlotsParallelSubprocesses(base: number): Promise<void> {
           MIDNIGHT_SPLIT_SLOT: String(slot),
           MIDNIGHT_SPLIT_BASE_INDEX: String(base),
         };
-        const child = spawn("npm", ["run", "run-pipeline-split-slot", "-w", "@charli3perp/cli"], {
-          cwd: repoRoot,
-          env,
-          stdio: "inherit",
-          shell: false,
-        });
+        const child = spawnSplitSlotProcess({ env, stdio: "inherit" });
         child.on("error", reject);
         child.on("close", (code) =>
-          code === 0 ? resolve() : reject(new Error(`split slot ${slot} npm exit ${code}`)),
+          code === 0 ? resolve() : reject(new Error(`split slot ${slot} exit ${code}`)),
         );
       }),
   );

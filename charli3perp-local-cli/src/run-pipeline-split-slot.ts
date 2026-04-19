@@ -22,6 +22,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  console.log(
+    `[split-slot ${slot}] START ${new Date().toISOString()} wallMs=${Date.now()} (if five lines appear together, slots launched in parallel)`,
+  );
+
   const mnemonic = process.env.BIP39_MNEMONIC;
   if (!mnemonic || !bip39.validateMnemonic(mnemonic)) {
     console.error("Set valid BIP39_MNEMONIC");
