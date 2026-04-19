@@ -153,6 +153,42 @@ export function startParallelCliJob(body: {
   return { ok: true, job: spawnNpmCliJob("parallel-cli", "parallel-cli", extra) };
 }
 
+/**
+ * Await `npm run run-all -w @charli3perp/cli` from repo root — same invocation as a manual terminal run
+ * (no `parallel-cli` wrapper, so private-state paths match `tsx src/run-charli3perp-all.ts` defaults).
+ */
+export function runRunAllCliSync(): Promise<{
+  wallMs: number;
+  exitCode: number | null;
+  logTail: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    let buf = "";
+    const append = (chunk: Buffer) => {
+      buf += chunk.toString();
+      if (buf.length > 256_000) {
+        buf = buf.slice(-256_000);
+      }
+    };
+    const child = spawn("npm", ["run", "run-all", "-w", "@charli3perp/cli"], {
+      cwd: REPO_ROOT,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout?.on("data", append);
+    child.stderr?.on("data", append);
+    child.on("error", (e) => reject(e));
+    child.on("close", (code) => {
+      resolve({
+        wallMs: Date.now() - t0,
+        exitCode: code,
+        logTail: buf.slice(-32_000),
+      });
+    });
+  });
+}
+
 export function getMidnightJob(id: string): MidnightJobRecord | undefined {
   return jobs.get(id);
 }
@@ -191,5 +227,11 @@ export function midnightSetupSnapshot(): Record<string, unknown> {
     },
     note:
       "BIP39_MNEMONIC must be set (repo-root .env) so workers share the same seed as the CLI. Parallel runs need a proof server that can handle concurrent load.",
+    runAllSync: {
+      method: "POST",
+      path: "/api/midnight/cli/run-all",
+      description:
+        "Blocks until `npm run run-all` completes; `wallMs` matches terminal speed for benchmarking (same cwd + env as API process).",
+    },
   };
 }

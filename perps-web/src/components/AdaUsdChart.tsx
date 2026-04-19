@@ -60,10 +60,7 @@ export function AdaUsdChart() {
     <div className="panel chart-panel">
       <div className="chart-header">
         <div>
-          <h2>ADA / USD</h2>
-          <p className="chart-sub">
-            Charli3 ODV mark — session history (updates every {POLL_MS / 1000}s)
-          </p>
+          <h2>ADA/USD</h2>
         </div>
         {last && (
           <div className="chart-meta">
@@ -83,7 +80,7 @@ export function AdaUsdChart() {
         </p>
       )}
       {chartData.length < 2 ? (
-        <div className="chart-empty">Collecting price points…</div>
+        <div className="chart-empty">…</div>
       ) : (
         <div className="chart-wrap">
           <ResponsiveContainer width="100%" height={220}>
@@ -133,7 +130,7 @@ export function AdaUsdChart() {
                 }
                 formatter={(value: number | undefined) => [
                   value != null ? formatPxAxis(value) : "—",
-                  "Mark (USD)",
+                  "",
                 ]}
               />
               <Area

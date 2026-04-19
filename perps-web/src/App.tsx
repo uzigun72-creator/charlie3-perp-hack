@@ -112,13 +112,13 @@ type QueuedTrade = {
 
 function orderStatusLabel(entry: OrderLookupEntry | undefined): string {
   if (!entry) return "…";
-  if (entry.kind === "resting") return "Open";
+  if (entry.kind === "resting") return "Resting";
   if (entry.kind === "not_found") return "Closed";
   if (entry.kind === "trade") {
     if (entry.error) return "Failed";
-    if (entry.status === "confirmed") return "Confirmed";
-    if (entry.status === "pending_user_l1") return "Sign Cardano";
-    return "Settling";
+    if (entry.status === "confirmed") return "Done";
+    if (entry.status === "pending_user_l1") return "Sign";
+    return "…";
   }
   return "—";
 }
@@ -207,10 +207,8 @@ export function App() {
   const [size, setSize] = useState("100");
   const [leverage, setLeverage] = useState(5);
 
-  const [riskText, setRiskText] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [submitMessage, setSubmitMessage] = useState("");
-  const [lastResult, setLastResult] = useState<Record<string, unknown> | null>(null);
   const [tab, setTab] = useState<"trade" | "account" | "explorer">("trade");
   const [trackedOrders, setTrackedOrders] = useState<TrackedOrderRow[]>([]);
   const [orderLookup, setOrderLookup] = useState<Record<string, OrderLookupEntry>>({});
@@ -324,7 +322,7 @@ export function App() {
         return;
       }
       try {
-        setSubmitMessage("Sign Charli3 pull + settlement anchor in your wallet (two prompts)…");
+        setSubmitMessage("Sign…");
         const key = cip30WalletKey || cip30Wallets[0];
         if (!key) {
           throw new Error("No CIP-30 wallet found. Install Eternl, Lace, or Nami.");
@@ -336,7 +334,7 @@ export function App() {
           session,
           walletApi,
         );
-        setSubmitMessage("Recording Cardano txs…");
+        setSubmitMessage("…");
         const r = await api("/api/trade/user-l1-complete", {
           method: "POST",
           body: JSON.stringify({
@@ -348,11 +346,7 @@ export function App() {
         const cj = (await r.json()) as { ok?: boolean; error?: string; status?: string };
         if (!r.ok) throw new Error(cj.error || `HTTP ${r.status}`);
         setSubmitState("done");
-        setSubmitMessage(
-          cj.status === "confirmed"
-            ? "Matched trade confirmed on Midnight and Cardano (user-paid L1)."
-            : "Cardano txs submitted; waiting for confirmations.",
-        );
+        setSubmitMessage(cj.status === "confirmed" ? "Done" : "Pending");
         void refreshOrderLookup([tradeId]);
         void refreshBook();
         void refreshStats();
@@ -366,7 +360,6 @@ export function App() {
 
   const applyTradeSuccess = useCallback(
     (j: Record<string, unknown>, ctx: { side: "long" | "short"; price: string; size: string }) => {
-      setLastResult(j);
       if (j.needsUserCardano === true && j.cardanoSession && typeof j.tradeId === "string") {
         void completeUserPaidL1(j);
         const refId = j.tradeId as string;
@@ -405,11 +398,7 @@ export function App() {
       }
       setSubmitState("done");
       setSubmitMessage(
-        j.status === "resting"
-          ? "Order is resting on the local book (no on-chain pipeline yet). It fills when an incoming order crosses your price — or post the opposite side to match yourself."
-          : j.status === "confirmed"
-            ? "Order confirmed on Midnight and Cardano."
-            : "Submitted; some confirmations are still pending — check Details.",
+        j.status === "resting" ? "Resting" : j.status === "confirmed" ? "Done" : "Pending",
       );
       void refreshBook();
       void refreshStats();
@@ -495,38 +484,12 @@ export function App() {
   const marginStr = marginForSubmit(size, priceEffective, leverage);
   const notional = notionalUsd(size, priceEffective);
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        const px = price || (oracle ? String(oracle.indexPrice) : "");
-        const r = await api("/api/risk/estimate", {
-          method: "POST",
-          body: JSON.stringify({
-            side,
-            price: px,
-            size,
-            leverage,
-            margin: marginForSubmit(size, px, leverage),
-          }),
-        });
-        const j = (await r.json()) as {
-          estLiquidationPrice: number | null;
-          markPrice: number | null;
-        };
-        if (j.estLiquidationPrice != null && Number.isFinite(j.estLiquidationPrice)) {
-          setRiskText(
-            `Approx. liquidation near ${formatPx(j.estLiquidationPrice)} (maintenance margin model; not financial advice).`,
-          );
-        } else {
-          setRiskText("Enter limit price, size, and leverage to see an estimated liquidation level.");
-        }
-      } catch {
-        setRiskText(null);
-      }
-    };
-    const id = setTimeout(run, 300);
-    return () => clearTimeout(id);
-  }, [side, price, size, leverage, oracle?.indexPrice]);
+  /** Ask → long (buy at offer); bid → short (sell into bid). */
+  const applyOrderBookLevel = useCallback((bookSide: "bid" | "ask", levelPrice: number, levelSize: number) => {
+    setSide(bookSide === "ask" ? "long" : "short");
+    setPrice(formatPx(levelPrice));
+    setSize(formatBookSize(levelSize));
+  }, []);
 
   useEffect(() => {
     if (oracle && !price) {
@@ -536,8 +499,7 @@ export function App() {
 
   const onSubmit = async () => {
     setSubmitState("submitting");
-    setSubmitMessage("Submitting… This may take several minutes (wallet sync + proving).");
-    setLastResult(null);
+    setSubmitMessage("…");
     try {
       const px = price || (oracle ? String(oracle.indexPrice) : "");
       const marginComputed = marginForSubmit(size, px, leverage);
@@ -569,9 +531,7 @@ export function App() {
         submitQueueRef.current = [...submitQueueRef.current, queued];
         syncQueuedCount();
         setSubmitState("done");
-        setSubmitMessage(
-          "Pipeline busy (Midnight + Cardano). Order queued — it will submit automatically when the pipeline is free.",
-        );
+        setSubmitMessage("Queued");
         void flushSubmitQueue();
         return;
       }
@@ -589,22 +549,20 @@ export function App() {
     <div className="app">
       <header className="header">
         <div>
-          <h1>Charli3 Perps</h1>
+          <h1>Perps</h1>
           <span className="pair-pill">ADA-USD</span>
           <div className="health" style={{ marginTop: "0.5rem" }}>
             <span className={`health-dot ${healthOk ? "ok" : ""}`} />
-            {healthOk ? "Connected" : "Check setup (API / proof server / Cardano)"}
+            {healthOk ? "Connected" : "Offline"}
           </div>
         </div>
         <div className="mark-block">
-          <div className="mark-label">Mark (Charli3)</div>
+          <div className="mark-label">Mark</div>
           <div className="mark-price">
             {oracle ? formatPx(oracle.indexPrice) : oracleErr ? "—" : "…"}
           </div>
           {oracleAt && (
-            <div className="mark-age">
-              Updated {Math.round((Date.now() - oracleAt) / 1000)}s ago
-            </div>
+            <div className="mark-age">{Math.round((Date.now() - oracleAt) / 1000)}s</div>
           )}
           {oracleErr && (
             <div className="mark-age" style={{ color: "var(--danger)" }}>
@@ -614,7 +572,7 @@ export function App() {
         </div>
       </header>
 
-      <nav className="app-nav" aria-label="Primary">
+      <nav className="app-nav" aria-label="Main">
         <button
           type="button"
           className={tab === "trade" ? "active" : ""}
@@ -639,115 +597,88 @@ export function App() {
       </nav>
 
       {tab === "trade" && (
-        <section className="market-stats" aria-label="Market statistics">
+        <section className="market-stats" aria-label="Stats">
           {statsErr && (
             <div className="stats-err" role="status">
-              Stats unavailable: {statsErr}
+              {statsErr}
             </div>
           )}
           {stats && (
             <div className="stats-grid">
               <div className="stat-card">
-                <div className="stat-label">24h volume (ADA)</div>
+                <div className="stat-label">24h</div>
                 <div className="stat-value">{formatAdaVol(stats.volumeBase24h)}</div>
-                <div className="stat-sub">${formatUsdCompact(stats.volumeUsd24h)} notional</div>
+                <div className="stat-sub">${formatUsdCompact(stats.volumeUsd24h)}</div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">All-time volume (ADA)</div>
+                <div className="stat-label">All-time</div>
                 <div className="stat-value">{formatAdaVol(stats.volumeBaseAllTime)}</div>
-                <div className="stat-sub">${formatUsdCompact(stats.volumeUsdAllTime)} notional</div>
+                <div className="stat-sub">${formatUsdCompact(stats.volumeUsdAllTime)}</div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Resting liquidity (USD)</div>
+                <div className="stat-label">Liquidity</div>
                 <div className="stat-value">${formatUsdCompact(stats.liquidityTotalUsd)}</div>
                 <div className="stat-sub">
-                  Bid ${formatUsdCompact(stats.liquidityBidUsd)} · Ask ${formatUsdCompact(stats.liquidityAskUsd)}
+                  {formatUsdCompact(stats.liquidityBidUsd)} / {formatUsdCompact(stats.liquidityAskUsd)}
                 </div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Best bid / ask</div>
+                <div className="stat-label">Bid / ask</div>
                 <div className="stat-value mono">
                   {stats.bestBid != null ? formatPx(stats.bestBid) : "—"} /{" "}
                   {stats.bestAsk != null ? formatPx(stats.bestAsk) : "—"}
                 </div>
                 <div className="stat-sub">
-                  Spread{" "}
-                  {stats.spread != null && Number.isFinite(stats.spread)
-                    ? formatPx(stats.spread)
-                    : "—"}{" "}
-                  · {stats.crossed ? "crossed" : "uncrossed"} (resting)
+                  {stats.spread != null && Number.isFinite(stats.spread) ? formatPx(stats.spread) : "—"}
                 </div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Trades (index)</div>
+                <div className="stat-label">Trades</div>
                 <div className="stat-value">
-                  {stats.confirmedTrades} conf. / {stats.pendingTrades} pend.
+                  {stats.confirmedTrades}/{stats.pendingTrades} · {stats.restingOrderCount}
                 </div>
-                <div className="stat-sub">{stats.restingOrderCount} resting orders</div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Mark / index</div>
+                <div className="stat-label">Mark</div>
                 <div className="stat-value">{formatPx(stats.markPrice)}</div>
-                <div className="stat-sub">Oracle mark (ADA-USD)</div>
               </div>
             </div>
           )}
           {!stats && !statsErr && (
-            <div className="stats-loading muted">Loading market stats…</div>
+            <div className="stats-loading muted">…</div>
           )}
         </section>
       )}
 
       {tab === "account" ? (
-        <Suspense fallback={<div className="panel chart-empty">Loading account…</div>}>
+        <Suspense fallback={<div className="panel chart-empty">…</div>}>
           <AccountDashboard />
         </Suspense>
       ) : tab === "explorer" ? (
-        <Suspense fallback={<div className="panel chart-empty">Loading explorer…</div>}>
+        <Suspense fallback={<div className="panel chart-empty">…</div>}>
           <ExplorerPage />
         </Suspense>
       ) : (
         <>
-          <Suspense fallback={<div className="panel chart-panel chart-empty">Loading chart…</div>}>
+          <Suspense fallback={<div className="panel chart-panel chart-empty">…</div>}>
             <AdaUsdChart />
           </Suspense>
 
           <div className="grid">
         <div className="panel orderbook-panel">
-          <h2>Order book</h2>
+          <h2>Book</h2>
           {!book ? (
             <div className="empty-book">Loading…</div>
           ) : book.bids.length === 0 && book.asks.length === 0 ? (
-            <div className="empty-book">
-              No bids or asks yet. Place a limit order — it rests locally until matched.
-            </div>
+            <div className="empty-book">Empty</div>
           ) : (
             <>
-              <p className="book-meta muted">
-                {book.restingOnly && (
-                  <span title="Historical index legs add both bid and ask at the same price, which mirrored the two sides — the ladder shows live quotes only.">
-                    Live resting book ·{" "}
-                  </span>
-                )}
-                {book.restingOrders != null && (
-                  <>
-                    <strong>{book.restingOrders}</strong> orders ·{" "}
-                  </>
-                )}
-                <strong>{book.totalConfirmed}</strong> confirmed in index
-                {book.aggregatedLevels !== false && (
-                  <> · sizes summed per price</>
-                )}
-              </p>
               <div className="book-side">
                 <h3 className="ask-head">Asks</h3>
-                <p className="book-side-hint muted">
-                  Worst → best (lowest ask / best ask at bottom, next to bids)
-                </p>
                 <div className="book-rows">
                   <div className="book-col-head" aria-hidden>
-                    <span>Price (USD)</span>
-                    <span>Size (ADA)</span>
+                    <span>Price</span>
+                    <span>Size</span>
                   </div>
                   {book.asks.length === 0 ? (
                     <div className="empty-book">—</div>
@@ -755,7 +686,20 @@ export function App() {
                     [...book.asks].reverse().map((r, i) => {
                       const pct = bookDepthPercent(r.size, bookDepthMax);
                       return (
-                        <div key={`a-${r.price}-${i}`} className="book-row book-row--ask">
+                        <div
+                          key={`a-${r.price}-${i}`}
+                          className="book-row book-row--ask"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Fill order form: long ${formatPx(r.price)} ${formatBookSize(r.size)} ADA`}
+                          onClick={() => applyOrderBookLevel("ask", r.price, r.size)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              applyOrderBookLevel("ask", r.price, r.size);
+                            }
+                          }}
+                        >
                           <div
                             className="book-depth-bar book-depth-bar--ask"
                             style={{ width: `${pct}%` }}
@@ -773,13 +717,10 @@ export function App() {
               </div>
               <div className="book-side">
                 <h3 className="bid-head">Bids</h3>
-                <p className="book-side-hint muted">
-                  Best → worst (highest bid / best bid at top)
-                </p>
                 <div className="book-rows">
                   <div className="book-col-head" aria-hidden>
-                    <span>Price (USD)</span>
-                    <span>Size (ADA)</span>
+                    <span>Price</span>
+                    <span>Size</span>
                   </div>
                   {book.bids.length === 0 ? (
                     <div className="empty-book">—</div>
@@ -787,7 +728,20 @@ export function App() {
                     book.bids.map((r, i) => {
                       const pct = bookDepthPercent(r.size, bookDepthMax);
                       return (
-                        <div key={`b-${i}`} className="book-row book-row--bid">
+                        <div
+                          key={`b-${i}`}
+                          className="book-row book-row--bid"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Fill order form: short ${formatPx(r.price)} ${formatBookSize(r.size)} ADA`}
+                          onClick={() => applyOrderBookLevel("bid", r.price, r.size)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              applyOrderBookLevel("bid", r.price, r.size);
+                            }
+                          }}
+                        >
                           <div
                             className="book-depth-bar book-depth-bar--bid"
                             style={{ width: `${pct}%` }}
@@ -809,7 +763,7 @@ export function App() {
 
         <div className="ticket-stack">
         <div className="panel ticket">
-          <h2>Place order</h2>
+          <h2>Order</h2>
           <div className="row">
             <label>Side</label>
             <div className="side-toggle">
@@ -830,12 +784,12 @@ export function App() {
             </div>
           </div>
           <div className="row">
-            <label>Limit price (USD per ADA)</label>
-            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="USD per ADA" />
+            <label>Price</label>
+            <input value={price} onChange={(e) => setPrice(e.target.value)} />
           </div>
           <div className="row">
-            <label>Size (ADA)</label>
-            <input value={size} onChange={(e) => setSize(e.target.value)} placeholder="ADA" />
+            <label>Size</label>
+            <input value={size} onChange={(e) => setSize(e.target.value)} />
           </div>
           <div className="row">
             <label>Leverage</label>
@@ -851,16 +805,15 @@ export function App() {
             />
           </div>
           <div className="row">
-            <label>Notional (USD)</label>
+            <label>Notional</label>
             <input
               className="input-readonly"
               readOnly
               value={notional != null ? formatPx(notional) : "—"}
-              title="size (ADA) × limit price (USD per ADA)"
             />
           </div>
           <div className="row">
-            <label>Initial margin (USD)</label>
+            <label>Margin</label>
             <input
               className="input-readonly"
               readOnly
@@ -869,13 +822,8 @@ export function App() {
                   ? formatPx(Number.parseFloat(marginStr))
                   : "—"
               }
-              title="(size × price) / leverage — sent with your order"
             />
           </div>
-          <p className="formula-hint">
-            Initial margin = notional ÷ leverage = (size × price) ÷ leverage
-          </p>
-          {riskText && <div className="risk-line">{riskText}</div>}
           {userPaysFeature && (
             <div className="row user-pays-row">
               <label className="user-pays-label">
@@ -884,13 +832,13 @@ export function App() {
                   checked={userPaysCardano}
                   onChange={(e) => setUserPaysCardano(e.target.checked)}
                 />
-                Pay Cardano fees (Charli3 + anchor) with browser wallet
+                L1 fees
               </label>
               {userPaysCardano && cip30Wallets.length > 0 && (
                 <select
                   value={cip30WalletKey || cip30Wallets[0]}
                   onChange={(e) => setCip30WalletKey(e.target.value)}
-                  aria-label="CIP-30 wallet"
+                  aria-label="Wallet"
                 >
                   {cip30Wallets.map((k) => (
                     <option key={k} value={k}>
@@ -900,12 +848,8 @@ export function App() {
                 </select>
               )}
               {userPaysCardano && cip30Wallets.length === 0 && (
-                <span className="user-pays-warn">No CIP-30 wallet detected — install Eternl, Lace, or Nami.</span>
+                <span className="user-pays-warn">—</span>
               )}
-              <p className="formula-hint">
-                Requires API <code>ALLOW_USER_PAYS_CARDANO_L1=1</code> and{" "}
-                <code>VITE_BLOCKFROST_PROJECT_ID</code> in <code>perps-web/.env</code>.
-              </p>
             </div>
           )}
           <button
@@ -923,16 +867,16 @@ export function App() {
             {submitState === "submitting" ? (
               <>
                 <span className="spinner" />
-                Confirming on networks…
+                …
               </>
             ) : (
-              "Place order"
+              "Submit"
             )}
           </button>
           {queuedCount > 0 && (
             <div className="status-banner status-banner--queue" role="status">
-              <strong>{queuedCount}</strong> order{queuedCount === 1 ? "" : "s"} queued locally —{" "}
-              {queueBusy ? "submitting the next one now…" : "will auto-submit when the pipeline is free."}
+              {queuedCount}
+              {queueBusy ? " · …" : ""}
             </div>
           )}
           {submitState !== "idle" && (
@@ -942,33 +886,18 @@ export function App() {
               {submitMessage}
             </div>
           )}
-          <details className="details">
-            <summary>Technical details</summary>
-            <p>
-              Full flow: Charli3 oracle → Midnight five-contract pipeline → Cardano Charli3 reference tx
-              + settlement anchor. Requires proof server, funded Midnight wallet, and Blockfrost in{" "}
-              <code>.env</code>. Only one pipeline runs at a time on the API; if it&apos;s busy you get a
-              client-side queue and automatic retry — orders are not lost while this tab stays open.
-            </p>
-            {lastResult && (
-              <pre>{JSON.stringify(lastResult, null, 2)}</pre>
-            )}
-          </details>
         </div>
 
         <div className="panel order-status-panel">
-          <h2>Order status</h2>
-          <p className="order-status-hint muted">
-            Orders you submit from this browser. Status updates every few seconds.
-          </p>
+          <h2>Status</h2>
           {trackedOrders.length === 0 ? (
-            <div className="empty-book">No orders yet — submit a trade to track it here.</div>
+            <div className="empty-book">None</div>
           ) : (
             <div className="order-status-table-wrap">
               <table className="order-status-table">
                 <thead>
                   <tr>
-                    <th scope="col">Reference</th>
+                    <th scope="col">ID</th>
                     <th scope="col">Side</th>
                     <th scope="col">Price</th>
                     <th scope="col">Size</th>
@@ -980,7 +909,7 @@ export function App() {
                     const st = orderLookup[row.id];
                     return (
                       <tr key={row.id}>
-                        <td className="mono" title={row.id}>
+                        <td className="mono">
                           {shortId(row.id)}
                         </td>
                         <td className={row.side === "long" ? "side-long" : "side-short"}>

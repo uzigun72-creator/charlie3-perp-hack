@@ -25,6 +25,9 @@ import {
   lockCollateralForTrade,
   type LockCollateralForTradeResult,
 } from "../../src/cardano/margin_pool_flow.js";
+import type { OrderIndexEntry } from "./orderIndex.js";
+import { updateEntry } from "./orderIndex.js";
+import { cardanoTxExplorerUrl } from "./explorerUrls.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const PAIR = "ADA-USD";
@@ -39,6 +42,16 @@ function runExclusiveSettlementAnchor<T>(fn: () => Promise<T>): Promise<T> {
     () => undefined,
   );
   return run;
+}
+
+/** Persist partial pipeline results so `/api/explorer/trades` shows tx hashes as each step finishes. */
+async function patchTradeIndex(
+  tradeId: string | undefined,
+  patch: Partial<OrderIndexEntry>,
+): Promise<void> {
+  const id = tradeId?.trim();
+  if (!id) return;
+  await updateEntry(id, patch);
 }
 
 /**
@@ -63,7 +76,11 @@ function midnightWorkerPoolSizeFromEnv(): number {
 }
 
 function midnightWorkerOffsetFromEnv(): number {
-  return Math.max(0, Number.parseInt(process.env.PERPS_MIDNIGHT_WORKER_OFFSET || "1", 10) || 1);
+  const raw = process.env.PERPS_MIDNIGHT_WORKER_OFFSET?.trim();
+  if (!raw) return 1;
+  const n = Number.parseInt(raw, 10);
+  /** `0` is valid (faucet usually funds `deriveKeysAt(0)`); avoid `|| 1` which turned 0 into 1. */
+  return Number.isFinite(n) && n >= 0 ? n : 1;
 }
 
 /** Round-robin derive index in [offset, offset + pool - 1] — aligns with `midnight-parallel-cli` worker slots. */
@@ -246,13 +263,6 @@ function runMidnightCliCapture(
   });
 }
 
-function preprodExplorerTxUrl(txHash: string): string {
-  const net = (process.env.CARDANO_NETWORK || "Preprod").toLowerCase();
-  return net === "preview"
-    ? `https://preview.cardanoscan.io/transaction/${txHash}`
-    : `https://preprod.cardanoscan.io/transaction/${txHash}`;
-}
-
 async function runMidnightWithRetries(
   env: NodeJS.ProcessEnv,
   npmScript: "run-all" | "run-pipeline" | "run-pipeline-split",
@@ -348,6 +358,8 @@ export async function runFullPipelineTrade(
     sharedCharli3PullTxHash?: string;
     /** HD-derived worker index for isolated Midnight state (parallel sweep / CLI pattern). */
     midnightDeriveKeyIndex?: number;
+    /** When set, explorer index is updated incrementally as each tx lands (hashes appear before full pipeline returns). */
+    tradeIndexId?: string;
   } = {},
 ): Promise<FullTradeResult> {
   assertNetworks();
@@ -471,6 +483,10 @@ export async function runFullPipelineTrade(
   const net = (process.env.CARDANO_NETWORK || "Preprod").trim();
   const anchorMinLovelace = String(process.env.ANCHOR_MIN_LOVELACE || "2000000");
 
+  await patchTradeIndex(opts.tradeIndexId, {
+    pipelineLogTail: `[perps-api] ${new Date().toISOString()} Starting Midnight: npm run ${npmScript} (mode=${mode}). Tx hashes appear after this step completes; Cardano runs next unless user-paid L1.\n`,
+  });
+
   if (userPaysCardano) {
     const { stdout } = await runMidnightWithRetries(env, npmScript);
     logPipelinePhase("midnight_cli_user_pays_cardano", pipelineT0);
@@ -478,6 +494,10 @@ export async function runFullPipelineTrade(
     const midnightMatchingSealTxHash = useFullPipeline
       ? (extractMatchingSealTxHash(stdout) ?? "")
       : "";
+    await patchTradeIndex(opts.tradeIndexId, {
+      midnightBindTxHash,
+      midnightMatchingSealTxHash,
+    });
     const settlementId = `ada-usd-${new Date().toISOString().replace(/[:.]/g, "-")}`;
     const cardanoSession: CardanoSessionPayload = {
       pairId: PAIR,
@@ -522,8 +542,13 @@ export async function runFullPipelineTrade(
   const reusePull =
     (opts.sharedCharli3PullTxHash ?? process.env.C3PERP_CHARLI3_PULL_TX_HASH)?.replace(/^0x/i, "").trim() ?? "";
   const reusePullOk = reusePull.length === 64 && /^[0-9a-f]+$/i.test(reusePull);
+  /**
+   * Default **sequential**: finish Midnight CLI (deploy + ZK + matching when applicable), then Cardano Charli3 pull,
+   * then settlement anchor. Set `C3PERP_PARALLEL_MIDNIGHT_CHARLI3_PULL=1` to run Midnight CLI and Charli3 pull
+   * concurrently (shorter wall time when both stacks are healthy; more load on proof server + wallet).
+   */
   const parallelMidnightAndPull =
-    (process.env.C3PERP_PARALLEL_MIDNIGHT_CHARLI3_PULL || "1").trim() !== "0" && !reusePullOk;
+    (process.env.C3PERP_PARALLEL_MIDNIGHT_CHARLI3_PULL ?? "0").trim() === "1" && !reusePullOk;
 
   let stdout: string;
   let pullTxHash: string;
@@ -535,7 +560,14 @@ export async function runFullPipelineTrade(
     logPipelinePhase("midnight_cli_reuse_pull", pipelineT0);
     stdout = mid.stdout;
     pullTxHash = reusePull.toLowerCase();
-    pullExplorer = preprodExplorerTxUrl(pullTxHash);
+    pullExplorer = cardanoTxExplorerUrl(pullTxHash);
+    await patchTradeIndex(opts.tradeIndexId, {
+      midnightBindTxHash: extractBindTxHash(stdout) ?? "",
+      midnightMatchingSealTxHash: useFullPipeline
+        ? (extractMatchingSealTxHash(stdout) ?? "")
+        : "",
+      charli3PullTxHash: pullTxHash,
+    });
     lucidForAnchor = await createAppLucid();
     logPipelinePhase("createAppLucid_after_reuse_pull", pipelineT0);
   } else if (parallelMidnightAndPull) {
@@ -561,18 +593,35 @@ export async function runFullPipelineTrade(
     const mid = await runMidnightWithRetries(env, npmScript);
     logPipelinePhase("midnight_cli_sequential_first", tSeq);
     stdout = mid.stdout;
+    const midnightBindEarly = extractBindTxHash(stdout) ?? "";
+    const midnightMatchEarly = useFullPipeline
+      ? (extractMatchingSealTxHash(stdout) ?? "")
+      : "";
+    await patchTradeIndex(opts.tradeIndexId, {
+      midnightBindTxHash: midnightBindEarly,
+      midnightMatchingSealTxHash: midnightMatchEarly,
+    });
     const lucid = await createAppLucid();
     const pull = await submitCharli3OracleReferenceTx(PAIR, { lucid });
     logPipelinePhase("charli3_pull_tx_sequential_after_midnight", tSeq);
     pullTxHash = pull.txHash;
     pullExplorer = pull.explorerUrl;
     lucidForAnchor = lucid;
+    await patchTradeIndex(opts.tradeIndexId, { charli3PullTxHash: pullTxHash });
   }
 
   const midnightBindTxHash = extractBindTxHash(stdout) ?? "";
   const midnightMatchingSealTxHash = useFullPipeline
     ? (extractMatchingSealTxHash(stdout) ?? "")
     : "";
+
+  if (parallelMidnightAndPull) {
+    await patchTradeIndex(opts.tradeIndexId, {
+      midnightBindTxHash,
+      midnightMatchingSealTxHash,
+      charli3PullTxHash: pullTxHash,
+    });
+  }
 
   const settlementId = `ada-usd-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   const midnightBlob = JSON.stringify({
@@ -602,6 +651,10 @@ export async function runFullPipelineTrade(
   );
   logPipelinePhase("settlement_anchor_submit", tAnchor);
   logPipelinePhase("runFullPipelineTrade_total", pipelineT0);
+
+  await patchTradeIndex(opts.tradeIndexId, {
+    settlementAnchorTxHash: anchor.txHash,
+  });
 
   return {
     oracle: v,

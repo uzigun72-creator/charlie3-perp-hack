@@ -162,11 +162,7 @@ export function AccountDashboard() {
   return (
     <div className="account-dash">
       <div className="panel wallet-panel">
-        <h2>Cardano wallet</h2>
-        <p className="account-hint">
-          Uses <code>WALLET_MNEMONIC</code> from <code>.env</code> (same wallet as Charli3 pull / settlement
-          anchors on Preprod).
-        </p>
+        <h2>Wallet</h2>
         {walletErr && (
           <p className="chart-err" role="alert">
             {walletErr}
@@ -180,12 +176,12 @@ export function AccountDashboard() {
             <dd className="mono-addr">{wallet.address}</dd>
             <dt>Balance</dt>
             <dd>
-              <strong>{wallet.ada}</strong> tADA
+              <strong>{wallet.ada}</strong>
             </dd>
           </dl>
         )}
         {!walletErr && !wallet && (
-          <p className="chart-empty">Loading wallet…</p>
+          <p className="chart-empty">…</p>
         )}
       </div>
 
@@ -193,20 +189,15 @@ export function AccountDashboard() {
 
       <div className="panel fills-panel">
         <div className="fills-head">
-          <h2>Filled orders</h2>
+          <h2>Fills</h2>
           <button type="button" className="btn-ghost" onClick={() => void loadFills()}>
             Refresh
           </button>
         </div>
-        <p className="account-hint">
-          Trades confirmed on Midnight + both Cardano txs (from this app&apos;s index). Unrealized P&amp;L uses
-          the current mark; matched long/short legs at the same price offset. Est. fees assume {FEE_BPS_EST} bps
-          per fill (demo only).
-        </p>
         {fillsLoading ? (
           <p className="chart-empty">Loading…</p>
         ) : fills.length === 0 ? (
-          <p className="chart-empty">No confirmed fills yet.</p>
+          <p className="chart-empty">—</p>
         ) : (
           <>
             {mark != null && (
@@ -215,21 +206,18 @@ export function AccountDashboard() {
                   Mark <strong className="mono-sm">{formatUsd(mark, 6)}</strong>
                 </span>
                 <span>
-                  Volume (notional) <strong className="mono-sm">{formatUsd(pnlTotals.sumVolume, 2)}</strong> USD
+                  Vol <strong className="mono-sm">{formatUsd(pnlTotals.sumVolume, 2)}</strong>
                 </span>
                 <span>
-                  Σ Net uPnL <strong className={`mono-sm ${pnlClass(pnlTotals.sumNet)}`}>{formatUsd(pnlTotals.sumNet, 4)}</strong> USD
+                  Net <strong className={`mono-sm ${pnlClass(pnlTotals.sumNet)}`}>{formatUsd(pnlTotals.sumNet, 4)}</strong>
                 </span>
                 <span>
-                  Σ Est. fees <strong className={`mono-sm ${pnlClass(pnlTotals.sumFees)}`}>{formatUsd(pnlTotals.sumFees, 4)}</strong> USD
+                  Fee <strong className={`mono-sm ${pnlClass(pnlTotals.sumFees)}`}>{formatUsd(pnlTotals.sumFees, 4)}</strong>
                 </span>
                 <span>
-                  Running P&amp;L <strong className={`mono-sm ${pnlClass(pnlTotals.running)}`}>{formatUsd(pnlTotals.running, 4)}</strong> USD
+                  Run <strong className={`mono-sm ${pnlClass(pnlTotals.running)}`}>{formatUsd(pnlTotals.running, 4)}</strong>
                 </span>
               </div>
-            )}
-            {mark === null && (
-              <p className="account-hint">Loading mark price for P&amp;L…</p>
             )}
             <div className="fills-table-wrap">
               <table className="fills-table">
@@ -239,10 +227,10 @@ export function AccountDashboard() {
                     <th>Pair</th>
                     <th>Bid</th>
                     <th>Ask</th>
-                    <th>Net uPnL</th>
-                    <th>Est. fee</th>
-                    <th>Running P&amp;L</th>
-                    <th>Cardano</th>
+                    <th>Net</th>
+                    <th>Fee</th>
+                    <th>P&amp;L</th>
+                    <th>L1</th>
                   </tr>
                 </thead>
                 <tbody>

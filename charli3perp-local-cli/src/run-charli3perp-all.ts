@@ -47,7 +47,11 @@ async function main(): Promise<void> {
   await waitForWalletSyncedWithHeartbeat(walletCtx.wallet);
 
   console.log('Ensuring DUST is ready…');
-  await ensureDustReady(walletCtx, { timeoutMs: 240_000 });
+  const dustTimeoutMs = Math.max(
+    60_000,
+    Number.parseInt(process.env.MIDNIGHT_DUST_READY_TIMEOUT_MS ?? '600000', 10) || 600_000,
+  );
+  await ensureDustReady(walletCtx, { timeoutMs: dustTimeoutMs });
   console.log('DUST ready.');
 
   await persistMidnightWalletState(walletCtx);

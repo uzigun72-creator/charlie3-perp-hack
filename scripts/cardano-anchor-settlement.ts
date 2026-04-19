@@ -55,12 +55,13 @@ async function main() {
     console.log("explorer= (emulator — no public explorer; tx is in-process only)");
     return;
   }
-  const net = process.env.CARDANO_NETWORK || "Preprod";
-  const explorer =
-    net === "Preview"
-      ? `https://preview.cardanoscan.io/transaction/${txHash}`
-      : `https://preprod.cardanoscan.io/transaction/${txHash}`;
-  console.log("explorer=", explorer);
+  const h = txHash.replace(/^0x/i, "").toLowerCase();
+  const base = (
+    process.env.CARDANO_EXPLORER_BASE?.trim() ||
+    process.env.EXPLORER_BASE?.trim() ||
+    "https://explorer.1am.xyz"
+  ).replace(/\/$/, "");
+  console.log("explorer=", `${base}/tx/${h}`);
 }
 
 main().catch((e) => {

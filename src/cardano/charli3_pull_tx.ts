@@ -4,9 +4,13 @@ import { charli3KupoUrl, feedConfigForPair } from "../charli3/config.js";
 import { listUnspentC3asMatches } from "../charli3/kupo_client.js";
 
 function explorerTxUrl(txHash: string): string {
-  const net = (process.env.CARDANO_NETWORK || "Preprod").toLowerCase();
-  if (net === "preview") return `https://preview.cardanoscan.io/transaction/${txHash}`;
-  return `https://preprod.cardanoscan.io/transaction/${txHash}`;
+  const h = txHash.replace(/^0x/i, "").toLowerCase();
+  const base = (
+    process.env.CARDANO_EXPLORER_BASE?.trim() ||
+    process.env.EXPLORER_BASE?.trim() ||
+    "https://explorer.1am.xyz"
+  ).replace(/\/$/, "");
+  return `${base}/tx/${h}`;
 }
 
 /** Submit Preprod tx that `readFrom` latest C3AS oracle UTxO for the pair. */

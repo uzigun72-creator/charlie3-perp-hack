@@ -104,13 +104,11 @@ export function MarginPoolPanel() {
         return;
       }
       if (j.txHash && j.explorerUrl) {
-        setMsg(`Tx ${j.txHash.slice(0, 12)}… — ${j.explorerUrl}`);
+        setMsg(`${j.txHash.slice(0, 12)}…`);
       } else if (j.steps) {
-        setMsg(
-          `Demo: bootstrap → ${j.steps.bootstrapUrl} | deposit → ${j.steps.depositUrl} | merge → ${j.steps.mergeUrl}`,
-        );
+        setMsg("OK");
       } else {
-        setMsg("Done.");
+        setMsg("OK");
       }
       await load();
     } catch (e) {
@@ -123,7 +121,7 @@ export function MarginPoolPanel() {
   const bootstrapLovelace = () => {
     const n = Number.parseFloat(bootstrapAda);
     if (!Number.isFinite(n) || n <= 0) {
-      setMsg("Enter a positive ADA amount for bootstrap.");
+      setMsg("Invalid amount");
       return;
     }
     void postAction("/api/margin-pool/bootstrap", { lovelace: Math.round(n * 1e6) });
@@ -132,7 +130,7 @@ export function MarginPoolPanel() {
   const depositLov = () => {
     const n = Number.parseFloat(depositAda);
     if (!Number.isFinite(n) || n <= 0) {
-      setMsg("Enter a positive ADA amount for margin deposit.");
+      setMsg("Invalid amount");
       return;
     }
     void postAction("/api/margin-pool/deposit", { lovelace: Math.round(n * 1e6) });
@@ -141,8 +139,8 @@ export function MarginPoolPanel() {
   if (loading) {
     return (
       <div className="panel margin-pool-panel">
-        <h2>L1 margin pool (Aiken)</h2>
-        <p className="chart-empty">Loading…</p>
+        <h2>Pool</h2>
+        <p className="chart-empty">…</p>
       </div>
     );
   }
@@ -150,13 +148,9 @@ export function MarginPoolPanel() {
   if (err || !status) {
     return (
       <div className="panel margin-pool-panel">
-        <h2>L1 margin pool (Aiken)</h2>
+        <h2>Pool</h2>
         <p className="chart-err" role="alert">
-          {err || "Margin pool status unavailable."}
-        </p>
-        <p className="account-hint">
-          Requires Blockfrost Preprod and compiled <code>cardano/margin-pool/plutus.json</code> (
-          <code>npm run build:margin-pool</code>).
+          {err || "—"}
         </p>
         <button type="button" className="btn-ghost" onClick={() => void load()}>
           Retry
@@ -170,38 +164,31 @@ export function MarginPoolPanel() {
   return (
     <div className="panel margin-pool-panel">
       <div className="fills-head">
-        <h2>L1 margin pool (Aiken)</h2>
+        <h2>Pool</h2>
         <button type="button" className="btn-ghost" onClick={() => void load()}>
           Refresh
         </button>
       </div>
-      <p className="account-hint">
-        On-chain margin vault + pooled collateral (see <code>cardano/margin-pool/</code>). Uses the same{" "}
-        <code>WALLET_MNEMONIC</code> as the Cardano wallet above. Read-only status is always shown; on-chain
-        actions require <code>MARGIN_POOL_UI_ACTIONS=1</code> in repo <code>.env</code>.
-      </p>
-
       <dl className="wallet-dl">
         <dt>Network</dt>
         <dd>{status.addresses.network}</dd>
-        <dt>Pool script address</dt>
+        <dt>Pool</dt>
         <dd className="mono-addr">{status.addresses.poolAddress}</dd>
-        <dt>Margin vault address</dt>
+        <dt>Vault</dt>
         <dd className="mono-addr">{status.addresses.marginAddress}</dd>
-        <dt>Pool UTxOs / margin UTxOs</dt>
+        <dt>UTxO</dt>
         <dd>
           {status.poolUtxos.length} / {status.marginUtxos.length}
         </dd>
-        <dt>ADA at pool / margin scripts</dt>
+        <dt>ADA</dt>
         <dd>
-          {adaFromLovelace(status.poolLovelaceTotal)} / {adaFromLovelace(status.marginLovelaceTotal)} tADA
+          {adaFromLovelace(status.poolLovelaceTotal)} / {adaFromLovelace(status.marginLovelaceTotal)}
         </dd>
         {status.poolDatumPreview && (
           <>
-            <dt>Pool datum (merge total / count)</dt>
+            <dt>Datum</dt>
             <dd className="mono-sm">
-              {status.poolDatumPreview.totalMarginLovelace} lovelace merged · {status.poolDatumPreview.mergeCount}{" "}
-              merges
+              {status.poolDatumPreview.totalMarginLovelace} · {status.poolDatumPreview.mergeCount}
             </dd>
           </>
         )}
@@ -209,8 +196,7 @@ export function MarginPoolPanel() {
 
       {!actions && (
         <p className="account-hint" role="status">
-          On-chain actions disabled. Set <code>MARGIN_POOL_UI_ACTIONS=1</code> and restart the API to bootstrap,
-          deposit margin, or merge.
+          Off
         </p>
       )}
 
@@ -218,7 +204,7 @@ export function MarginPoolPanel() {
         <div className="margin-pool-actions">
           <div className="margin-pool-row">
             <label>
-              Bootstrap pool (ADA)
+              Bootstrap
               <input
                 type="text"
                 value={bootstrapAda}
@@ -232,12 +218,12 @@ export function MarginPoolPanel() {
               disabled={!!busy}
               onClick={() => bootstrapLovelace()}
             >
-              {busy === "/api/margin-pool/bootstrap" ? "…" : "Bootstrap pool"}
+              {busy === "/api/margin-pool/bootstrap" ? "…" : "Bootstrap"}
             </button>
           </div>
           <div className="margin-pool-row">
             <label>
-              Deposit margin (ADA)
+              Deposit
               <input
                 type="text"
                 value={depositAda}
@@ -251,7 +237,7 @@ export function MarginPoolPanel() {
               disabled={!!busy}
               onClick={() => depositLov()}
             >
-              {busy === "/api/margin-pool/deposit" ? "…" : "Deposit to margin vault"}
+              {busy === "/api/margin-pool/deposit" ? "…" : "Deposit"}
             </button>
           </div>
           <div className="margin-pool-row">
@@ -261,9 +247,8 @@ export function MarginPoolPanel() {
               disabled={!!busy}
               onClick={() => void postAction("/api/margin-pool/merge")}
             >
-              {busy === "/api/margin-pool/merge" ? "…" : "Merge margin → pool"}
+              {busy === "/api/margin-pool/merge" ? "…" : "Merge"}
             </button>
-            <span className="account-hint">Requires exactly one pool UTxO and ≥1 margin UTxO.</span>
           </div>
           <div className="margin-pool-row">
             <button
@@ -277,7 +262,7 @@ export function MarginPoolPanel() {
                 })
               }
             >
-              {busy === "/api/margin-pool/demo" ? "…" : "Run full demo (3 txs)"}
+              {busy === "/api/margin-pool/demo" ? "…" : "Demo"}
             </button>
           </div>
         </div>

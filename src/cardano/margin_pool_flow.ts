@@ -20,10 +20,14 @@ import {
   type MarginPoolBlueprintJson,
 } from "./margin_pool_scripts.js";
 
-export function marginPoolTxExplorerUrl(network: string, txHash: string): string {
-  const n = network.toLowerCase();
-  if (n === "preview") return `https://preview.cardanoscan.io/transaction/${txHash}`;
-  return `https://preprod.cardanoscan.io/transaction/${txHash}`;
+export function marginPoolTxExplorerUrl(_network: string, txHash: string): string {
+  const h = txHash.replace(/^0x/i, "").toLowerCase();
+  const base = (
+    process.env.CARDANO_EXPLORER_BASE?.trim() ||
+    process.env.EXPLORER_BASE?.trim() ||
+    "https://explorer.1am.xyz"
+  ).replace(/\/$/, "");
+  return `${base}/tx/${h}`;
 }
 
 export type MarginPoolAddresses = {

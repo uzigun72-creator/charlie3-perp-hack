@@ -22,10 +22,13 @@ export interface SubmitSettlementAnchorResult {
 
 function explorerUrl(txHash: string): string {
   if (cardanoBackend() === "emulator") return "(emulator)";
-  const net = process.env.CARDANO_NETWORK || "Preprod";
-  return net === "Preview"
-    ? `https://preview.cardanoscan.io/transaction/${txHash}`
-    : `https://preprod.cardanoscan.io/transaction/${txHash}`;
+  const h = txHash.replace(/^0x/i, "").toLowerCase();
+  const base = (
+    process.env.CARDANO_EXPLORER_BASE?.trim() ||
+    process.env.EXPLORER_BASE?.trim() ||
+    "https://explorer.1am.xyz"
+  ).replace(/\/$/, "");
+  return `${base}/tx/${h}`;
 }
 
 async function blockfrostTxExists(txHash: string): Promise<boolean> {

@@ -16,6 +16,8 @@ type TradeExplorerRow = {
   createdAt: string;
   confirmedAt?: string;
   error?: string;
+  /** Last lines from API pipeline (in-memory progress before tx hashes land). */
+  pipelineLogTail?: string;
   bidCommitmentHex: string;
   askCommitmentHex: string;
   steps: Step[];
@@ -37,9 +39,14 @@ function shortHash(h: string | null): string {
   return t.length > 20 ? `${t.slice(0, 10)}…${t.slice(-8)}` : t;
 }
 
+function statusLabel(s: TradeExplorerRow["status"]): string {
+  if (s === "confirmed") return "ok";
+  if (s === "pending_user_l1") return "sign";
+  return "…";
+}
+
 export function ExplorerPage() {
   const [rows, setRows] = useState<TradeExplorerRow[]>([]);
-  const [networks, setNetworks] = useState<{ cardano: string; midnight: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "confirmed" | "pending">("all");
@@ -54,11 +61,9 @@ export function ExplorerPage() {
       if (!r.ok) {
         setErr(j.error || `HTTP ${r.status}`);
         setRows([]);
-        setNetworks(null);
         return;
       }
       setRows(Array.isArray(j.trades) ? j.trades : []);
-      setNetworks(j.networks ?? null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setRows([]);
@@ -69,7 +74,7 @@ export function ExplorerPage() {
 
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), 25_000);
+    const t = setInterval(() => void load(), 5_000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -110,28 +115,14 @@ export function ExplorerPage() {
   return (
     <div className="explorer-dash">
       <div className="panel explorer-intro">
-        <h2>Chain verification</h2>
-        <p className="account-hint">
-          Every indexed trade runs on <strong>Midnight Preview</strong> (order deploy + bind, and when using the
-          full pipeline, <strong>charli3perp-matching</strong> <code>sealMatchRecord</code>) and{" "}
-          <strong>Cardano {networks?.cardano ?? "Preprod"}</strong> (Charli3 oracle reference tx + settlement
-          anchor). Use the links to open the public explorers and verify transaction details and hashes.
-        </p>
-        {networks && (
-          <p className="explorer-networks muted">
-            Cardano network: <code>{networks.cardano}</code> · Midnight:{" "}
-            <code>{networks.midnight}</code>
-          </p>
-        )}
         <div className="explorer-toolbar">
           <label className="explorer-search">
             <span className="sr-only">Filter</span>
             <input
               type="search"
-              placeholder="Filter by trade id, tx hash, commitment…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              aria-label="Filter transactions"
+              aria-label="Filter"
             />
           </label>
           <div className="explorer-filters" role="group" aria-label="Status">
@@ -159,13 +150,9 @@ export function ExplorerPage() {
       )}
 
       {loading && !rows.length ? (
-        <p className="chart-empty">Loading transactions…</p>
+        <p className="chart-empty">…</p>
       ) : flatRows.length === 0 ? (
-        <p className="chart-empty">
-          {rows.length === 0
-            ? "No trades in the local index yet."
-            : "No rows match your filter."}
-        </p>
+        <p className="chart-empty">—</p>
       ) : (
         <div className="panel explorer-table-panel">
           <div className="explorer-table-wrap">
@@ -173,12 +160,12 @@ export function ExplorerPage() {
               <thead>
                 <tr>
                   <th scope="col">Time</th>
-                  <th scope="col">Trade</th>
+                  <th scope="col">ID</th>
                   <th scope="col">Status</th>
                   <th scope="col">Step</th>
                   <th scope="col">Chain</th>
-                  <th scope="col">Transaction</th>
-                  <th scope="col">Verify</th>
+                  <th scope="col">Tx</th>
+                  <th scope="col">Link</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,21 +177,18 @@ export function ExplorerPage() {
                         : new Date(t.createdAt).toLocaleString()}
                     </td>
                     <td className="explorer-trade">
-                      <span className="mono-sm" title={t.id}>
-                        {shortId(t.id)}
-                      </span>
+                      <span className="mono-sm">{shortId(t.id)}</span>
                       <span className="explorer-pair muted">{t.pairId}</span>
                     </td>
                     <td>
                       <span
                         className={`explorer-status explorer-status--${t.status === "pending_user_l1" ? "pending" : t.status}`}
                       >
-                        {t.status}
+                        {statusLabel(t.status)}
                       </span>
                       {(t.status === "pending" || t.status === "pending_user_l1") && t.error && (
-                        <span className="explorer-err-hint" title={t.error}>
-                          {" "}
-                          (error)
+                        <span className="explorer-err-hint" title={t.error} aria-label={t.error}>
+                          !
                         </span>
                       )}
                     </td>
@@ -214,13 +198,13 @@ export function ExplorerPage() {
                         {s.chain === "midnight" ? "Midnight" : "Cardano"}
                       </span>
                     </td>
-                    <td className="mono-sm explorer-hash" title={s.txHash ?? undefined}>
+                    <td className="mono-sm explorer-hash">
                       {shortHash(s.txHash)}
                     </td>
                     <td className="explorer-links">
                       {s.explorerUrl && s.txHash ? (
                         <a href={s.explorerUrl} target="_blank" rel="noreferrer">
-                          Open explorer
+                          Open
                         </a>
                       ) : (
                         <span className="muted">—</span>
@@ -231,11 +215,6 @@ export function ExplorerPage() {
               </tbody>
             </table>
           </div>
-          <p className="explorer-foot muted">
-            {flatRows.length} row(s) · Midnight explorer base can be set with{" "}
-            <code>MIDNIGHT_EXPLORER_BASE</code> on the API. Cardano links follow{" "}
-            <code>CARDANO_NETWORK</code>.
-          </p>
         </div>
       )}
     </div>

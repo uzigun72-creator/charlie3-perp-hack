@@ -220,11 +220,14 @@ function resolveOrderCommitmentHexForAnchor(): string {
   return "";
 }
 
-function preprodExplorerTxUrl(txHash: string): string {
-  const net = (process.env.CARDANO_NETWORK || "Preprod").toLowerCase();
-  return net === "preview"
-    ? `https://preview.cardanoscan.io/transaction/${txHash}`
-    : `https://preprod.cardanoscan.io/transaction/${txHash}`;
+function cardanoExplorerTxUrl(txHash: string): string {
+  const h = txHash.replace(/^0x/i, "").toLowerCase();
+  const base = (
+    process.env.CARDANO_EXPLORER_BASE?.trim() ||
+    process.env.EXPLORER_BASE?.trim() ||
+    "https://explorer.1am.xyz"
+  ).replace(/\/$/, "");
+  return `${base}/tx/${h}`;
 }
 
 async function stepCardano(oracle: VerifiedIndexPrice, midnightBindTx: string): Promise<void> {
@@ -233,7 +236,7 @@ async function stepCardano(oracle: VerifiedIndexPrice, midnightBindTx: string): 
   let pullExplorer: string;
   if (reusePull.length === 64 && /^[0-9a-f]+$/i.test(reusePull)) {
     pullTxHash = reusePull.toLowerCase();
-    pullExplorer = preprodExplorerTxUrl(pullTxHash);
+    pullExplorer = cardanoExplorerTxUrl(pullTxHash);
     console.log("\n--- Cardano Preprod: Charli3 reference tx (skipped; using C3PERP_CHARLI3_PULL_TX_HASH) ---");
     console.log("charli3_pull txHash:", pullTxHash);
     console.log("explorer:", pullExplorer);

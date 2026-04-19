@@ -46,6 +46,7 @@ import {
   getMidnightJob,
   listMidnightJobs,
   midnightSetupSnapshot,
+  runRunAllCliSync,
   startFundDerivedJob,
   startParallelCliJob,
 } from "./midnightSetup.js";
@@ -176,6 +177,41 @@ app.get("/api/midnight/jobs/:id", (c) => {
     return c.json({ error: "job not found" }, 404);
   }
   return c.json(job);
+});
+
+/**
+ * Same Midnight work as `npm run run-all -w @charli3perp/cli` from repo root — for API vs CLI speed parity.
+ * Requires `PERPS_ADMIN_SECRET`; shares `tradePipelineInFlight` with trade submits.
+ */
+app.post("/api/midnight/cli/run-all", async (c) => {
+  const denied = assertAdminAuth(c);
+  if (denied) return denied;
+  if (tradePipelineInFlight) {
+    return c.json(
+      {
+        error:
+          "Another trade pipeline or Midnight CLI run is in flight. Retry when idle.",
+      },
+      429,
+    );
+  }
+  tradePipelineInFlight = true;
+  try {
+    const result = await runRunAllCliSync();
+    return c.json({
+      ok: result.exitCode === 0,
+      wallMs: result.wallMs,
+      exitCode: result.exitCode,
+      logTail: result.logTail,
+    });
+  } catch (e) {
+    return c.json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      500,
+    );
+  } finally {
+    tradePipelineInFlight = false;
+  }
 });
 
 app.get("/api/oracle", async (c) => {
@@ -458,13 +494,6 @@ app.get("/api/explorer/trades", async (c) => {
         explorerUrl: mh ? midnightTxExplorerUrl(mh) : null,
       },
       {
-        key: "midnight_matching_seal" as const,
-        label: "Midnight — matching (sealMatchRecord)",
-        chain: "midnight" as const,
-        txHash: mm || null,
-        explorerUrl: mm ? midnightTxExplorerUrl(mm) : null,
-      },
-      {
         key: "charli3_pull" as const,
         label: "Cardano — Charli3 oracle reference",
         chain: "cardano" as const,
@@ -486,6 +515,7 @@ app.get("/api/explorer/trades", async (c) => {
       createdAt: e.createdAt,
       confirmedAt: e.confirmedAt,
       error: e.error,
+      pipelineLogTail: e.pipelineLogTail,
       bidCommitmentHex: e.bidCommitmentHex,
       askCommitmentHex: e.askCommitmentHex,
       steps,
@@ -554,6 +584,7 @@ async function runFullPipelineForBidAsk(
   try {
     await appendPending(pending);
     const pipelineResult = await runFullPipelineTrade(bid, ask, {
+      tradeIndexId: id,
       userPaysCardano: flags.userPaysCardano === true,
       ...(flags.midnightDeriveKeyIndex !== undefined
         ? { midnightDeriveKeyIndex: flags.midnightDeriveKeyIndex }
